@@ -495,3 +495,12 @@ details.how:not([open]) { gap: 0; }
   .entry-edit-row { grid-template-columns: minmax(0, 1fr) 112px; }
   .entry-edit-row .btn { grid-column: 1 / -1; }
 }
+
+/* ───────────── Cuenta ───────────── */
+.account-form { display: flex; flex-direction: column; gap: 12px; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.account-actions .btn { flex: 1 1 140px; }
+.account-email { font-weight: 700; font-size: 16px; overflow-wrap: anywhere; margin: 0; }
+.account-state { display: flex; align-items: center; gap: 6px; font-size: 14px; margin: 0; color: var(--accent-ink); }
+.account-state.over { color: var(--bad-ink); }
+.account-state svg { flex: 0 0 auto; }

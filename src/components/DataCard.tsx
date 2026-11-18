@@ -69,7 +69,7 @@ export default function DataCard({ toast, pending, onPendingDone }: Props) {
   return (
     <section className="card">
       <h2 className="card-title"><Smartphone size={15} /> Tus datos</h2>
-      <p className="small muted">Se guardan solo en este dispositivo. Para pasarlos a otro sitio (la app de inicio, otro móvil o el ordenador), cópialos aquí y pégalos allí.</p>
+      <p className="small muted">Copia de seguridad o traspaso sin cuenta: copia los datos aquí y pégalos en el otro sitio (la app de inicio, otro móvil o el ordenador).</p>
 
       <div className="data-actions">
         <button className="btn ghost" onClick={copy}><ClipboardCopy size={16} /> Copiar mis datos</button>

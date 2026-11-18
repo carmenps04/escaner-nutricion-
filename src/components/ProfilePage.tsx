@@ -10,6 +10,7 @@ import { fmt } from '../lib/evaluate.ts';
 import CitasCard from './CitasCard.tsx';
 import TrainingCard from './TrainingCard.tsx';
 import DataCard from './DataCard.tsx';
+import AccountCard, { useSyncStatus } from './AccountCard.tsx';
 import DietPlanCard from './DietPlanCard.tsx';
 
 const num = (s: string) => {
@@ -37,9 +38,11 @@ interface Props {
   toast: (m: string) => void;
   pendingImport?: string | null;
   onPendingDone: () => void;
+  /** Sube cuando llegan datos de otro dispositivo. */
+  syncVersion?: number;
 }
 
-export default function ProfilePage({ profile, configured, onSaved, toast, pendingImport, onPendingDone }: Props) {
+export default function ProfilePage({ profile, configured, onSaved, toast, pendingImport, onPendingDone, syncVersion = 0 }: Props) {
   const [p, setP] = useState<Profile>(profile);
   const [busy, setBusy] = useState<string | null>(null);
   const [found, setFound] = useState<string[] | null>(null);
@@ -55,6 +58,14 @@ export default function ProfilePage({ profile, configured, onSaved, toast, pendi
   };
   useEffect(() => { if (pendingImport) setSection('datos'); }, [pendingImport]);
   const subnav = useRef<HTMLDivElement>(null);
+  const sync = useSyncStatus();
+  // Si llegan datos de otro dispositivo y aquí no se ha tocado nada, se muestran los nuevos.
+  const lastProfile = useRef(profile);
+  useEffect(() => {
+    if (JSON.stringify(p) === JSON.stringify(lastProfile.current)) setP(profile);
+    lastProfile.current = profile;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile]);
   useEffect(() => {
     const el = subnav.current?.querySelector<HTMLElement>('.on');
     el?.scrollIntoView({ block: 'nearest', inline: 'center' });
@@ -102,7 +113,7 @@ export default function ProfilePage({ profile, configured, onSaved, toast, pendi
       <header className="page-head">
         <div>
           <h1>Mi perfil</h1>
-          <p>Datos de tu última cita con el dietista. Se guardan solo en este dispositivo.</p>
+          <p>Datos de tu última cita con el dietista. {sync.email ? 'Se guardan en este dispositivo y en tu cuenta.' : <>Se guardan en este dispositivo. Para tenerlos en todos, entra con tu cuenta en <button className="link inline" onClick={() => setSection('datos')}>Tus datos</button>.</>}</p>
         </div>
       </header>
 
@@ -140,7 +151,7 @@ export default function ProfilePage({ profile, configured, onSaved, toast, pendi
         <TrainingCard semana={p.semana ?? []} onChange={(semana) => setP((old) => ({ ...old, semana, diasEntrenoSemana: semana.length }))} />
       )}
 
-      {section === 'plan' && <DietPlanCard />}
+      {section === 'plan' && <DietPlanCard key={syncVersion} />}
 
       {section === 'composicion' && (
         <section className="card">
@@ -177,9 +188,14 @@ export default function ProfilePage({ profile, configured, onSaved, toast, pendi
         </section>
       )}
 
-      {section === 'citas' && <CitasCard onChange={() => onSaved(syncProfileWithCitas(profile))} />}
+      {section === 'citas' && <CitasCard key={syncVersion} onChange={() => onSaved(syncProfileWithCitas(profile))} />}
 
-      {section === 'datos' && <DataCard toast={toast} pending={pendingImport} onPendingDone={onPendingDone} />}
+      {section === 'datos' && (
+        <>
+          <AccountCard toast={toast} />
+          <DataCard toast={toast} pending={pendingImport} onPendingDone={onPendingDone} />
+        </>
+      )}
 
       {dirty && (
         <div className="savebar">

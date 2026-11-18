@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { initCloud } from './lib/cloud.ts';
 import { Barcode, Camera, History as HistoryIcon, Keyboard, Loader2, NotebookPen, PenLine, ScanLine, Trash2, User, WifiOff, Image as ImageIcon } from 'lucide-react';
 import Scanner, { decodeBarcodePhoto } from './components/Scanner.tsx';
 import ProductForm from './components/ProductForm.tsx';
@@ -42,6 +43,19 @@ export default function App() {
   const [todayVersion, setTodayVersion] = useState(0);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [pendingImport, setPendingImport] = useState<string | null>(null);
+  const [syncVersion, setSyncVersion] = useState(0);
+  // Cuenta: retoma la sincronización y repinta cuando llegan datos de otro dispositivo.
+  useEffect(() => {
+    initCloud();
+    const onSync = () => {
+      setProfile(loadProfile());
+      setConfigured(hasProfile());
+      setHistVersion((v) => v + 1);
+      setSyncVersion((v) => v + 1);
+    };
+    window.addEventListener('escaner-sync', onSync);
+    return () => window.removeEventListener('escaner-sync', onSync);
+  }, []);
   const [histSort, setHistSort] = useState<'recent' | 'score'>(() => (localStorage.getItem('escaner.orden') === 'score' ? 'score' : 'recent'));
   useEffect(() => {
     try { localStorage.setItem('escaner.orden', histSort); } catch { /* ignorar */ }
@@ -311,6 +325,7 @@ export default function App() {
         {view.name === 'profile' && (
           <ProfilePage
             key={JSON.stringify(profile)}
+            syncVersion={syncVersion}
             profile={profile}
             configured={configured}
             toast={toast}

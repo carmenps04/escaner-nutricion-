@@ -1,7 +1,7 @@
 // Copia de seguridad y traspaso de datos entre Safari, la app de inicio y otros dispositivos.
 // Todo vive en localStorage; aquí se empaqueta en un código de texto o en un archivo .json.
 
-const KEYS = [
+export const KEYS = [
   'escaner.perfil.v1',
   'escaner.citas.v1',
   'escaner.historial.v1',

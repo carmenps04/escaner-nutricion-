@@ -58,4 +58,8 @@ export default defineConfig({
     ),
   },
   build: { chunkSizeWarningLimit: 900 },
+  // Solo para las pruebas de sincronización entre dispositivos: Firebase de mentira.
+  resolve: process.env.FAKE_FIREBASE
+    ? { alias: { 'firebase/app': '/tests/fake-firebase/app.js', 'firebase/auth': '/tests/fake-firebase/auth.js', 'firebase/firestore': '/tests/fake-firebase/firestore.js' } }
+    : undefined,
 });
