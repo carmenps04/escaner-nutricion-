@@ -1,13 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Dumbbell, PenLine, Plus, Sofa, Trash2 } from 'lucide-react';
 import MealBuilder from './MealBuilder.tsx';
 import type { Profile } from '../lib/profile.ts';
 import type { Product } from '../lib/types.ts';
 import { dowOf, type Today } from '../lib/training.ts';
-import { addEntry, dayKey, itemGrams, loadDay, remaining, removeEntry, totals, updateEntry, forGrams, type DiaryEntry } from '../lib/diary.ts';
+import { addEntry, dayKey, itemGrams, loadDay, remaining, removeEntry, totals, updateEntry, forGrams, type DiaryEntry, type Totals } from '../lib/diary.ts';
 import { fmt, plural } from '../lib/evaluate.ts';
 import { loadPlan, mealTarget } from '../lib/plan.ts';
-import { VsPlan } from './MealBuilder.tsx';
+import { useDraft, VsPlan } from './MealBuilder.tsx';
 
 const num = (s: string) => {
   const t = s.replace(',', '.').trim();
@@ -32,14 +32,29 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
   // Hoy manda el ajuste del día; otros días, la semana del perfil.
   const entreno = isToday ? hoy.entreno : (profile.semana ?? []).some((t) => t.dow === dowOf(date));
   const plan = entreno ? profile.entreno : profile.descanso;
-  const t = totals(entries);
+  // Comida que se está añadiendo o editando: el resumen enseña cómo quedaría el día con ella.
+  const [draft, setDraft] = useState<{ replaces?: string; t: Totals } | null>(null);
+  const onDraft = (replaces?: string) => (d: Totals | null) => setDraft(d && d.kcal > 0 ? { replaces, t: d } : null);
+  const saved = totals(entries);
+  const before = draft?.replaces ? totals(entries.filter((e) => e.id !== draft.replaces)) : saved;
+  const t = draft ? sum(before, draft.t) : saved;
   const left = remaining(plan, t);
+  const summary = useRef<HTMLElement>(null);
+  const [summaryVisible, setSummaryVisible] = useState(true);
+  useEffect(() => {
+    const el = summary.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([en]) => setSummaryVisible(en.isIntersecting), { threshold: 0.35 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   const refresh = () => setVersion((v) => v + 1);
   const shift = (days: number) => {
     const d = new Date(date);
     d.setDate(d.getDate() + days);
     setDate(d);
     setAdding(null);
+    setDraft(null);
   };
   const longDate = date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   const label = isToday ? 'Hoy' : longDate.charAt(0).toUpperCase() + longDate.slice(1);
@@ -62,7 +77,7 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
         <button className="icon-btn" aria-label="Día siguiente" onClick={() => shift(1)} disabled={isToday}><ChevronRight size={20} /></button>
       </div>
 
-      <section className="card">
+      <section className={`card ${draft ? 'previewing' : ''}`} ref={summary}>
         <div className="kcal-head">
           <div>
             <strong>{fmt(t.kcal, 0)}</strong> <span>/ {fmt(plan.kcal, 0)} kcal</span>
@@ -71,13 +86,16 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
             {left.kcal >= 0 ? `Te quedan ${fmt(left.kcal, 0)} kcal` : `Te has pasado ${fmt(-left.kcal, 0)} kcal`}
           </span>
         </div>
-        <Bar value={t.kcal} max={plan.kcal} big />
+        <Bar value={t.kcal} before={before.kcal} max={plan.kcal} big />
+        {draft && <p className="preview-note">Con la comida que estás añadiendo (+{fmt(t.kcal - before.kcal, 0)} kcal). Aún no está guardada.</p>}
         <div className="macros">
-          <Macro label="Proteína" value={t.prot} max={plan.prot} goal="reach" />
-          <Macro label="Hidratos" value={t.hc} max={plan.hc} />
-          <Macro label="Grasa" value={t.grasa} max={plan.grasa} />
+          <Macro previewing={!!draft} label="Proteína" value={t.prot} before={before.prot} max={plan.prot} goal="reach" />
+          <Macro previewing={!!draft} label="Hidratos" value={t.hc} before={before.hc} max={plan.hc} />
+          <Macro previewing={!!draft} label="Grasa" value={t.grasa} before={before.grasa} max={plan.grasa} />
         </div>
       </section>
+
+      {draft && !summaryVisible && <DraftStrip t={t} before={before} plan={plan} />}
 
       <section className="card">
         <h2 className="card-title">Comidas</h2>
@@ -88,12 +106,12 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
           </div>
         )}
         {adding === 'meal' && (
-          <MealBuilder entreno={entreno} onCancel={() => setAdding(null)} onSave={(e) => { addEntry(e, key); setAdding(null); refresh(); toast('Comida añadida al diario'); }} />
+          <MealBuilder entreno={entreno} onDraft={onDraft()} onCancel={() => setAdding(null)} onSave={(e) => { addEntry(e, key); setAdding(null); refresh(); toast('Comida añadida al diario'); }} />
         )}
-        {adding === 'manual' && <ManualEntry onCancel={() => setAdding(null)} onAdd={(e) => { addEntry(e, key); setAdding(null); refresh(); toast('Añadido al diario'); }} />}
+        {adding === 'manual' && <ManualEntry onDraft={onDraft()} onCancel={() => setAdding(null)} onAdd={(e) => { addEntry(e, key); setAdding(null); refresh(); toast('Añadido al diario'); }} />}
         {entries.length ? (
           <div className="entries">
-            {entries.map((e) => <EntryRow key={e.id} e={e} day={key} entreno={entreno} onOpen={onOpen} onChange={refresh} />)}
+            {entries.map((e) => <EntryRow key={e.id} e={e} day={key} entreno={entreno} onDraft={onDraft(e.id)} onOpen={onOpen} onChange={refresh} />)}
           </div>
         ) : (
           !adding && <p className="empty">Aún no has apuntado nada {isToday ? 'hoy' : 'este día'}.</p>
@@ -104,22 +122,30 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
   );
 }
 
-function Bar({ value, max, big }: { value: number; max: number; big?: boolean }) {
-  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+const sum = (a: Totals, b: Totals): Totals => ({ kcal: a.kcal + b.kcal, prot: a.prot + b.prot, hc: a.hc + b.hc, grasa: a.grasa + b.grasa });
+
+/** Barra de progreso; si hay comida en preparación, la parte nueva va en otro tono. */
+function Bar({ value, before = value, max, big }: { value: number; before?: number; max: number; big?: boolean }) {
+  const pct = (x: number) => (max > 0 ? Math.max(0, Math.min(100, (x / max) * 100)) : 0);
+  const base = pct(Math.min(before, value));
+  const add = pct(value) - base;
   return (
     <div className={`bar ${big ? 'big' : ''}`} aria-hidden>
-      <span style={{ width: `${pct}%` }} className={value > max ? 'over' : ''} />
+      <span style={{ width: `${base}%` }} className={before > max ? 'over' : ''} />
+      {add > 0 && <span style={{ width: `${add}%` }} className={`add ${value > max ? 'over' : ''}`} />}
     </div>
   );
 }
 
-function Macro({ label, value, max, goal }: { label: string; value: number; max: number; goal?: 'reach' }) {
+function Macro({ label, value, before = value, max, goal, previewing }: { label: string; value: number; before?: number; max: number; goal?: 'reach'; previewing?: boolean }) {
   const left = max - value;
+  const add = value - before;
   return (
     <div className="macro">
       <span className="macro-label">{label}</span>
-      <Bar value={value} max={max} />
+      <Bar value={value} before={before} max={max} />
       <span className="macro-val"><b>{fmt(value, 0)}</b> / {fmt(max, 0)} g</span>
+      {previewing && <em className="macro-add">{add < 0 ? '−' : '+'}{fmt(Math.abs(add), 0)} g</em>}
       <small className={left < 0 && goal !== 'reach' ? 'over' : 'muted'}>
         {left >= 0 ? `faltan ${fmt(left, 0)} g` : goal === 'reach' ? 'objetivo cumplido' : `+${fmt(-left, 0)} g`}
       </small>
@@ -127,7 +153,32 @@ function Macro({ label, value, max, goal }: { label: string; value: number; max:
   );
 }
 
-function EntryRow({ e, day, entreno, onOpen, onChange }: { e: DiaryEntry; day: string; entreno: boolean; onOpen: (p: Product) => void; onChange: () => void }) {
+/** Resumen fijo arriba mientras se añade una comida y el resumen del día no se ve. */
+function DraftStrip({ t, before, plan }: { t: Totals; before: Totals; plan: { kcal: number; prot: number; hc: number; grasa: number } }) {
+  const items: [string, number, number][] = [
+    ['Prot.', t.prot, plan.prot],
+    ['HC', t.hc, plan.hc],
+    ['Grasa', t.grasa, plan.grasa],
+  ];
+  return (
+    <div className="draft-strip" role="status">
+      <div className="draft-inner">
+        <div className="draft-kcal">
+          <span>Con esta comida</span>
+          <b className={t.kcal > plan.kcal ? 'over' : ''}>{fmt(t.kcal, 0)}</b> / {fmt(plan.kcal, 0)} kcal
+        </div>
+        <Bar value={t.kcal} before={before.kcal} max={plan.kcal} />
+        <div className="draft-macros">
+          {items.map(([l, v, m]) => (
+            <span key={l} className={l !== 'Prot.' && v > m ? 'over' : ''}><small>{l}</small> <b>{fmt(v, 0)}</b>/{fmt(m, 0)}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EntryRow({ e, day, entreno, onDraft, onOpen, onChange }: { e: DiaryEntry; day: string; entreno: boolean; onDraft: (t: Totals | null) => void; onOpen: (p: Product) => void; onChange: () => void }) {
   const target = useMemo(() => mealTarget(loadPlan(), e.name, entreno), [e.name, entreno]);
   const [editing, setEditing] = useState(false);
   const [qty, setQty] = useState(String(e.units ?? e.grams ?? '').replace('.', ','));
@@ -140,7 +191,7 @@ function EntryRow({ e, day, entreno, onOpen, onChange }: { e: DiaryEntry; day: s
   if (editing && manual) {
     return (
       <div className="entry">
-        <ManualEntry initial={e} onCancel={() => setEditing(false)} onAdd={(m) => { updateEntry(e.id, m, day); setEditing(false); onChange(); }} />
+        <ManualEntry initial={e} onDraft={onDraft} onCancel={() => setEditing(false)} onAdd={(m) => { updateEntry(e.id, m, day); setEditing(false); onChange(); }} />
       </div>
     );
   }
@@ -148,7 +199,7 @@ function EntryRow({ e, day, entreno, onOpen, onChange }: { e: DiaryEntry; day: s
   if (editing && e.items) {
     return (
       <div className="entry">
-        <MealBuilder initial={e} entreno={entreno} onCancel={() => setEditing(false)} onSave={(m) => { updateEntry(e.id, m, day); setEditing(false); onChange(); }} />
+        <MealBuilder initial={e} entreno={entreno} onDraft={onDraft} onCancel={() => setEditing(false)} onSave={(m) => { updateEntry(e.id, m, day); setEditing(false); onChange(); }} />
       </div>
     );
   }
@@ -212,11 +263,12 @@ function EntryRow({ e, day, entreno, onOpen, onChange }: { e: DiaryEntry; day: s
   );
 }
 
-function ManualEntry({ onAdd, onCancel, initial }: { onAdd: (e: Omit<DiaryEntry, 'id' | 'time'>) => void; onCancel: () => void; initial?: DiaryEntry }) {
+function ManualEntry({ onAdd, onCancel, initial, onDraft }: { onAdd: (e: Omit<DiaryEntry, 'id' | 'time'>) => void; onCancel: () => void; initial?: DiaryEntry; onDraft?: (t: Totals | null) => void }) {
   const str = (x?: number) => (x == null ? '' : String(Math.round(x * 10) / 10).replace('.', ','));
   const [v, setV] = useState({ name: initial?.name ?? '', kcal: str(initial?.kcal), prot: str(initial?.prot), hc: str(initial?.hc), grasa: str(initial?.grasa) });
   const set = (k: keyof typeof v) => (ev: React.ChangeEvent<HTMLInputElement>) => setV({ ...v, [k]: ev.target.value });
   const ok = v.name.trim() && num(v.kcal) > 0;
+  useDraft(onDraft, num(v.kcal) > 0 ? { kcal: num(v.kcal), prot: num(v.prot), hc: num(v.hc), grasa: num(v.grasa) } : null);
   return (
     <div className="cita-editor">
       <label className="field"><span>Qué has comido</span><input value={v.name} onChange={set('name')} placeholder="Comida del menú: pollo con arroz" /></label>

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ClipboardList, History, Leaf, Plus, Search, Trash2 } from 'lucide-react';
 import type { Product } from '../lib/types.ts';
 import { addToHistory, loadHistory } from '../lib/storage.ts';
 import { FOODS } from '../lib/foods.ts';
-import { forGrams, itemGrams, mealTotals, pastMeals, type DiaryEntry, type MealItem, type PastMeal } from '../lib/diary.ts';
+import { forGrams, itemGrams, mealTotals, pastMeals, type DiaryEntry, type MealItem, type PastMeal, type Totals } from '../lib/diary.ts';
 import { fmt, plural } from '../lib/evaluate.ts';
 import { fruitPortion, fruitRaciones, loadPlan, mealTarget, vegRule } from '../lib/plan.ts';
 
@@ -30,6 +30,8 @@ interface Props {
   initial?: DiaryEntry;
   /** Día de entreno: cambia las raciones del plan del dietista. */
   entreno: boolean;
+  /** Lo que suma la comida mientras se prepara, para ver cómo quedaría el día. */
+  onDraft?: (t: Totals | null) => void;
   onSave: (e: Omit<DiaryEntry, 'id'>) => void;
   onCancel: () => void;
 }
@@ -38,7 +40,7 @@ interface Props {
  * Comida con varios ingredientes: se eligen productos ya escaneados (historial) con su cantidad y la
  * app suma calorías y macros.
  */
-export default function MealBuilder({ initial, entreno, onSave, onCancel }: Props) {
+export default function MealBuilder({ initial, entreno, onDraft, onSave, onCancel }: Props) {
   const [time, setTime] = useState(initial?.time ?? nowHHMM());
   const [name, setName] = useState(() => (initial && MEALS.includes(initial.name) ? initial.name : mealForTime(initial?.time ?? nowHHMM())));
   const [items, setItems] = useState<MealItem[]>(initial?.items ?? []);
@@ -80,6 +82,7 @@ export default function MealBuilder({ initial, entreno, onSave, onCancel }: Prop
   }, [q, mine]);
   const [creating, setCreating] = useState(false);
   const total = mealTotals(items);
+  useDraft(onDraft, items.length ? total : null);
   // Plan del dietista: raciones de esta comida, verdura limitada y raciones de fruta.
   const plan = useMemo(() => loadPlan(), []);
   const target = mealTarget(plan, name, entreno);
@@ -255,6 +258,15 @@ export default function MealBuilder({ initial, entreno, onSave, onCancel }: Prop
       </div>
     </div>
   );
+}
+
+/** Avisa al diario de lo que suma la comida en preparación (y de nada al cerrarse). */
+export function useDraft(onDraft: ((t: Totals | null) => void) | undefined, t: Totals | null) {
+  const cb = useRef(onDraft);
+  cb.current = onDraft;
+  const sig = t ? [t.kcal, t.prot, t.hc, t.grasa].map((x) => Math.round(x * 10)).join('|') : '';
+  useEffect(() => { cb.current?.(t); }, [sig]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => cb.current?.(null), []);
 }
 
 /** Lo que lleva la comida frente a lo que marca el plan del dietista (±15 % se da por bueno). */

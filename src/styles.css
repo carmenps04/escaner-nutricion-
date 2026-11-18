@@ -462,3 +462,28 @@ details.how:not([open]) { gap: 0; }
 }
 .alt-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .alt-error p { margin: 0; }
+
+/* ───────────── Diario: vista previa de la comida que se añade ───────────── */
+.bar { display: flex; }
+.bar span { flex: 0 0 auto; }
+.bar span + span.add { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.bar span:has(+ span.add) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.bar span.add { background: var(--accent); background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgba(255, 255, 255, 0.35) 4px 7px); }
+.bar span.add.over { background-color: var(--bad-dot); }
+.previewing { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
+.preview-note { margin: 8px 0 0; font-size: 13px; color: var(--accent-ink); font-weight: 600; }
+.macro-add { font-style: normal; font-size: 12px; font-weight: 700; color: var(--accent-ink); align-self: flex-start; background: var(--accent-soft); border-radius: 6px; padding: 1px 6px; }
+.draft-strip { position: fixed; z-index: 20; top: 0; left: 0; right: 0; padding: calc(env(safe-area-inset-top) + 8px) 16px 10px; background: var(--bg); border-bottom: 1px solid var(--line); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06); animation: strip-in 0.18s ease-out; }
+.draft-inner { max-width: 608px; margin: 0 auto; display: flex; flex-direction: column; gap: 6px; }
+.draft-kcal { display: flex; align-items: baseline; gap: 6px; font-size: 14px; color: var(--muted); }
+.draft-kcal span { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--accent-ink); margin-right: auto; }
+.draft-kcal b { font-size: 18px; color: var(--text); }
+.draft-macros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.draft-macros b { color: var(--text); }
+.draft-macros small { font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.draft-macros .over b { color: var(--bad-ink); }
+@keyframes strip-in { from { transform: translateY(-100%); } to { transform: none; } }
+@media (min-width: 960px) {
+  .draft-strip { left: var(--side-w); padding: 10px 40px; }
+  .draft-inner { max-width: 680px; }
+}
