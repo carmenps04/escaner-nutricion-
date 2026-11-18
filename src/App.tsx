@@ -40,6 +40,10 @@ export default function App() {
   const [histVersion, setHistVersion] = useState(0);
   const [todayVersion, setTodayVersion] = useState(0);
   const [online, setOnline] = useState(() => navigator.onLine);
+  const [histSort, setHistSort] = useState<'recent' | 'score'>(() => (localStorage.getItem('escaner.orden') === 'score' ? 'score' : 'recent'));
+  useEffect(() => {
+    try { localStorage.setItem('escaner.orden', histSort); } catch { /* ignorar */ }
+  }, [histSort]);
   const labelInput = useRef<HTMLInputElement>(null);
   const codeInput = useRef<HTMLInputElement>(null);
   const pendingCode = useRef<string | undefined>(undefined);
@@ -194,7 +198,7 @@ export default function App() {
           <div className="offline"><WifiOff size={15} /> Sin conexión: puedes valorar productos ya escaneados, fotos de etiquetas y valores a mano.</div>
         )}
         {view.name === 'scan' && (
-          <div className="page">
+          <div className="page narrow">
             <header className="page-head">
               <div>
                 <h1>Escanear</h1>
@@ -208,35 +212,27 @@ export default function App() {
                 <span>Haz una foto a la hoja de tu dietista para cargar tus calorías y macros. Hasta entonces se usan valores de ejemplo.</span>
               </button>
             )}
-            <div className="cols wide-left">
-              <div className="col">
-                <button className="scan-main" onClick={() => setView({ name: 'camera' })} disabled={!!busy}>
-                  <ScanLine size={42} />
-                  <strong>Escanear código de barras</strong>
-                  <span>Con la cámara</span>
+            <div className="col">
+              <button className="scan-main" onClick={() => setView({ name: 'camera' })} disabled={!!busy}>
+                <ScanLine size={42} />
+                <strong>Escanear código de barras</strong>
+                <span>Con la cámara</span>
+              </button>
+              <div className="tiles">
+                <button className="tile" onClick={() => { pendingCode.current = undefined; labelInput.current?.click(); }} disabled={!!busy}>
+                  <Camera size={22} /> Foto de la etiqueta
                 </button>
-                <div className="tiles">
-                  <button className="tile" onClick={() => { pendingCode.current = undefined; labelInput.current?.click(); }} disabled={!!busy}>
-                    <Camera size={22} /> Foto de la etiqueta
-                  </button>
-                  <button className="tile" onClick={() => codeInput.current?.click()} disabled={!!busy}>
-                    <ImageIcon size={22} /> Foto del código
-                  </button>
-                  <button className="tile" onClick={askCode} disabled={!!busy}>
-                    <Keyboard size={22} /> Escribir código
-                  </button>
-                  <button className="tile" onClick={() => setView({ name: 'form', product: blank() })} disabled={!!busy}>
-                    <PenLine size={22} /> Valores a mano
-                  </button>
-                </div>
-                {busy && <p className="busy"><Loader2 className="spin" size={18} /> {busy}</p>}
+                <button className="tile" onClick={() => codeInput.current?.click()} disabled={!!busy}>
+                  <ImageIcon size={22} /> Foto del código
+                </button>
+                <button className="tile" onClick={askCode} disabled={!!busy}>
+                  <Keyboard size={22} /> Escribir código
+                </button>
+                <button className="tile" onClick={() => setView({ name: 'form', product: blank() })} disabled={!!busy}>
+                  <PenLine size={22} /> Valores a mano
+                </button>
               </div>
-              <div className="col">
-                <section className="card">
-                  <h2 className="card-title">Últimos productos</h2>
-                  <RecentList key={histVersion} onOpen={(p) => setView({ name: 'result', product: p })} profile={profile} limit={6} />
-                </section>
-              </div>
+              {busy && <p className="busy"><Loader2 className="spin" size={18} /> {busy}</p>}
             </div>
           </div>
         )}
@@ -290,8 +286,12 @@ export default function App() {
                 <p>Valorados con tu perfil actual.</p>
               </div>
             </header>
+            <div className="seg" role="radiogroup" aria-label="Ordenar">
+              <button className={histSort === 'recent' ? 'on' : ''} onClick={() => setHistSort('recent')}>Más recientes</button>
+              <button className={histSort === 'score' ? 'on' : ''} onClick={() => setHistSort('score')}>Mejor valorados</button>
+            </div>
             <section className="card">
-              <RecentList key={histVersion} onOpen={(p) => setView({ name: 'result', product: p })} profile={profile} deletable />
+              <RecentList key={histVersion} sort={histSort} onOpen={(p) => setView({ name: 'result', product: p })} profile={profile} deletable />
             </section>
           </div>
         )}
@@ -315,29 +315,35 @@ export default function App() {
   );
 }
 
-function RecentList({ onOpen, profile, limit, deletable }: { onOpen: (p: Product) => void; profile: Profile; limit?: number; deletable?: boolean }) {
+function RecentList({ onOpen, profile, sort, deletable }: { onOpen: (p: Product) => void; profile: Profile; sort: 'recent' | 'score'; deletable?: boolean }) {
   const [items, setItems] = useState(loadHistory);
-  const list = limit ? items.slice(0, limit) : items;
+  // El historial se guarda del más reciente al más antiguo; por valoración se ordena por puntuación
+  // (y a igual puntuación, el más reciente primero).
+  const list = useMemo(() => {
+    const rows = items.map((h, i) => ({ ...h, i, e: evaluate(h.product, profile) }));
+    if (sort === 'score') rows.sort((a, b) => b.e.score - a.e.score || a.i - b.i);
+    return rows;
+  }, [items, profile, sort]);
   if (!list.length) return <p className="empty">Aún no has escaneado ningún producto.</p>;
   return (
     <div className="list">
-      {list.map(({ product }) => {
-        const v = evaluate(product, profile).verdict;
-        return (
-          <div key={(product.code ?? '') + product.name} className="list-item">
-            <button onClick={() => onOpen(product)}>
-              <span className={`dot v-${v}`} />
-              <span className="list-name">{product.name}{product.brand && <small>{product.brand}</small>}</span>
-              <span className={`pill v-${v}`}>{VERDICT_TEXT[v]}</span>
+      {list.map(({ product, date, e }) => (
+        <div key={(product.code ?? '') + product.name} className="list-item">
+          <button onClick={() => onOpen(product)}>
+            <span className={`dot v-${e.verdict}`} />
+            <span className="list-name">
+              {product.name}
+              <small>{[product.brand, sort === 'score' ? `${e.score}/100` : new Date(date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })].filter(Boolean).join(' · ')}</small>
+            </span>
+            <span className={`pill v-${e.verdict}`}>{VERDICT_TEXT[e.verdict]}</span>
+          </button>
+          {deletable && (
+            <button className="icon-btn" aria-label={`Borrar ${product.name}`} onClick={() => { removeFromHistory(product); setItems(loadHistory()); }}>
+              <Trash2 size={16} />
             </button>
-            {deletable && (
-              <button className="icon-btn" aria-label={`Borrar ${product.name}`} onClick={() => { removeFromHistory(product); setItems(loadHistory()); }}>
-                <Trash2 size={16} />
-              </button>
-            )}
-          </div>
-        );
-      })}
+          )}
+        </div>
+      ))}
     </div>
   );
 }
