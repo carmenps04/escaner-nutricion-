@@ -184,9 +184,10 @@ export function portion(p: Product, plan: DayPlan, verdict: Verdict, kind: Evalu
     return { grams: null, units: null, limitedBy: 'faltan datos', kcal: null, pctDayKcal: null, prot: null, hc: null, grasa: null };
   }
   const best = caps.reduce((a, b) => (b.g < a.g ? b : a));
-  // «Sin límite» solo para verduras y alimentos de muy pocas calorías (≤ 30 kcal por 100 g, no
-  // bebidas). Con lo demás se da la cifra, aunque sea alta (p. ej. leche desnatada: hasta 950 ml).
-  if (best.g > 600 && (n.kcal ?? 0) <= 30 && !isDrinkP(p)) {
+  // «Sin límite» solo para comida de pocas calorías (≤ 60 kcal por 100 g, como verdura o fruta)
+  // cuando el tope pasa de 600 g: decir «11 zanahorias» no ayuda. En bebidas se da siempre la cifra
+  // (p. ej. leche desnatada: hasta 950 ml).
+  if (best.g > 600 && (n.kcal ?? 0) <= 60 && !isDrinkP(p)) {
     return { grams: null, units: null, limitedBy: 'alimento poco calórico: no hay un límite práctico por toma', kcal: null, pctDayKcal: null, prot: null, hc: null, grasa: null };
   }
   let grams = best.g;
@@ -338,6 +339,12 @@ export function portionText(p: Portion, prod: Product): string {
 }
 
 export function plural(w: string): string {
+  // «patata mediana» → «patatas medianas»
+  if (w.includes(' ')) return w.split(' ').map(pluralWord).join(' ');
+  return pluralWord(w);
+}
+
+function pluralWord(w: string): string {
   if (/[aeiouáéó]$/i.test(w)) return w + 's';
   if (/z$/i.test(w)) return w.slice(0, -1) + 'ces';
   if (/ón$/i.test(w)) return w.slice(0, -2) + 'ones';

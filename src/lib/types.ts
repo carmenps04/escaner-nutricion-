@@ -40,7 +40,7 @@ export interface Product {
   stores?: string[];
   /** Cantidad del envase según Open Food Facts («425 g», «1 l»). */
   quantity?: string;
-  source: 'openfoodfacts' | 'foto' | 'manual';
+  source: 'openfoodfacts' | 'foto' | 'manual' | 'tabla';
 }
 
 export const EMPTY_NUTRIENTS: Nutrients = {

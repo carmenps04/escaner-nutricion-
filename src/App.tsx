@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Barcode, Camera, History as HistoryIcon, Keyboard, Loader2, NotebookPen, PenLine, ScanLine, Trash2, User, WifiOff, X, Image as ImageIcon } from 'lucide-react';
+import { Barcode, Camera, History as HistoryIcon, Keyboard, Loader2, NotebookPen, PenLine, ScanLine, Trash2, User, WifiOff, Image as ImageIcon } from 'lucide-react';
 import Scanner, { decodeBarcodePhoto } from './components/Scanner.tsx';
 import ProductForm from './components/ProductForm.tsx';
 import ResultView from './components/ResultView.tsx';
@@ -12,7 +12,7 @@ import { readImage, statusText } from './lib/ocr.ts';
 import { addToHistory, getCustom, loadHistory, removeFromHistory, saveCustom } from './lib/storage.ts';
 import { evaluate, VERDICT_TEXT } from './lib/evaluate.ts';
 import { today } from './lib/training.ts';
-import { askPersistence, isIOS, isStandalone } from './lib/backup.ts';
+import { askPersistence } from './lib/backup.ts';
 import TodayChip from './components/TodayChip.tsx';
 import DiaryPage from './components/DiaryPage.tsx';
 import CompareView from './components/CompareView.tsx';
@@ -42,7 +42,6 @@ export default function App() {
   const [todayVersion, setTodayVersion] = useState(0);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [pendingImport, setPendingImport] = useState<string | null>(null);
-  const [installHint, setInstallHint] = useState(() => isIOS() && !isStandalone() && localStorage.getItem('escaner.aviso-inicio') == null);
   const [histSort, setHistSort] = useState<'recent' | 'score'>(() => (localStorage.getItem('escaner.orden') === 'score' ? 'score' : 'recent'));
   useEffect(() => {
     try { localStorage.setItem('escaner.orden', histSort); } catch { /* ignorar */ }
@@ -219,14 +218,6 @@ export default function App() {
                 <p>Escanea un producto y te digo si encaja en tu plan.</p>
               </div>
             </header>
-            {installHint && (
-              <div className="install">
-                <span>
-                  <b>Añade la app a la pantalla de inicio</b> (Compartir → «Añadir a pantalla de inicio») para que Safari no borre tus datos. Antes, en Perfil, pulsa «Copiar mis datos» y pégalos al abrirla desde el icono.
-                </span>
-                <button className="icon-btn" aria-label="Cerrar aviso" onClick={() => { localStorage.setItem('escaner.aviso-inicio', '1'); setInstallHint(false); }}><X size={16} /></button>
-              </div>
-            )}
             {configured && <TodayChip hoy={hoy} onChange={refreshToday} />}
             {!configured && (
               <button className="setup" onClick={() => go('profile')}>

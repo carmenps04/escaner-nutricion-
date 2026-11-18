@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { History, Search, Trash2 } from 'lucide-react';
+import { History, Leaf, Plus, Search, Trash2 } from 'lucide-react';
 import type { Product } from '../lib/types.ts';
-import { loadHistory } from '../lib/storage.ts';
+import { addToHistory, loadHistory } from '../lib/storage.ts';
+import { FOODS } from '../lib/foods.ts';
 import { forGrams, itemGrams, mealTotals, pastMeals, type DiaryEntry, type MealItem, type PastMeal } from '../lib/diary.ts';
 import { fmt, plural } from '../lib/evaluate.ts';
 
@@ -61,11 +62,20 @@ export default function MealBuilder({ initial, onSave, onCancel }: Props) {
   const repeat = (m: PastMeal) => {
     setItems(m.items.map((i) => ({ ...i, product: fresh(i.product) })));
   };
+  // Busca en tus productos escaneados y en la tabla de alimentos naturales (fruta, verdura…).
+  const [extra, setExtra] = useState<Product[]>([]);
+  const mine = useMemo(() => [...extra, ...products], [extra, products]);
   const matches = useMemo(() => {
     const t = norm(q.trim());
-    const list = t ? products.filter((p) => norm(`${p.name} ${p.brand ?? ''}`).includes(t)) : products;
-    return list.slice(0, t ? 8 : 5);
-  }, [q, products]);
+    if (!t) return { mine: mine.slice(0, 5), foods: [] as Product[] };
+    const words = t.split(/\s+/);
+    const hit = (s: string) => words.every((w) => norm(s).includes(w));
+    return {
+      mine: mine.filter((p) => hit(`${p.name} ${p.brand ?? ''}`)).slice(0, 5),
+      foods: FOODS.filter((f) => hit(`${f.name} ${f.aliases ?? ''}`)).slice(0, 8),
+    };
+  }, [q, mine]);
+  const [creating, setCreating] = useState(false);
   const total = mealTotals(items);
 
   const add = (p: Product) => {
@@ -125,7 +135,11 @@ export default function MealBuilder({ initial, onSave, onCancel }: Props) {
                   <button className="icon-btn" aria-label={`Quitar ${it.product.name}`} onClick={() => setItems(items.filter((_, j) => j !== i))}><Trash2 size={15} /></button>
                 </div>
                 <div className="meal-item-qty">
-                  <QtyInput label={`Cantidad de ${it.product.name}`} value={it.qty} onChange={(qty) => edit(i, { qty })} />
+                  <QtyInput label={`Cantidad de ${it.product.name}`} value={it.qty} onChange={(qty) => {
+                    // «150» con la unidad en «pepinos» sería 37 kg: se entiende que eran gramos.
+                    if (it.unit === 'unidad' && it.product.unitWeight && qty >= 15 && qty * it.product.unitWeight > 1500) edit(i, { qty, unit: 'g' });
+                    else edit(i, { qty });
+                  }} />
                   {it.product.unitWeight ? (
                     <select aria-label="Unidad" value={it.unit} onChange={(e) => {
                       const unit = e.target.value as MealItem['unit'];
@@ -154,22 +168,35 @@ export default function MealBuilder({ initial, onSave, onCancel }: Props) {
       <div className="picker">
         <div className="with-icon">
           <Search size={16} />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={items.length ? 'Añadir otro producto…' : 'Busca un producto escaneado…'} aria-label="Buscar producto" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={items.length ? 'Añadir otro alimento…' : 'Busca: galletas, patata, tomate…'} aria-label="Buscar producto" />
         </div>
-        {(q || !items.length) && (
-          matches.length ? (
+        {(q || !items.length) && !creating && (
+          matches.mine.length || matches.foods.length ? (
             <div className="picker-list">
-              {!q && <span className="picker-hint">Últimos escaneados</span>}
-              {matches.map((p) => (
+              {matches.mine.length > 0 && <span className="picker-hint">{q ? 'Tus productos' : 'Últimos escaneados'}</span>}
+              {matches.mine.map((p) => (
                 <button key={(p.code ?? '') + p.name} onClick={() => add(p)}>
                   <span>{p.name}</span>
                   <small>{[p.brand, p.unitWeight ? `1 ${p.unitName ?? 'unidad'} = ${fmt(p.unitWeight, 1)} g` : null].filter(Boolean).join(' · ')}</small>
                 </button>
               ))}
+              {matches.foods.length > 0 && <span className="picker-hint"><Leaf size={11} style={{ verticalAlign: '-1px' }} /> Alimentos naturales</span>}
+              {matches.foods.map((p) => (
+                <button key={p.code} onClick={() => add(p)}>
+                  <span>{p.name}</span>
+                  <small>{[`${fmt(p.n.kcal ?? 0, 0)} kcal por 100 g`, p.unitWeight ? `1 ${p.unitName} ≈ ${fmt(p.unitWeight, 0)} g` : null].filter(Boolean).join(' · ')}</small>
+                </button>
+              ))}
             </div>
           ) : (
-            <p className="small muted">{products.length ? 'No hay ningún producto con ese nombre en tu historial.' : 'Aún no has escaneado productos.'} Escanéalo primero desde Escanear y luego vuelve aquí.</p>
+            <p className="small muted">{q ? 'No encuentro ese alimento entre tus productos ni en la tabla de alimentos naturales.' : 'Escribe el nombre de un producto escaneado o de un alimento natural (patata, tomate, plátano…).'}</p>
           )
+        )}
+        {q.trim().length >= 2 && !creating && (
+          <button className="link" onClick={() => setCreating(true)}><Plus size={14} style={{ verticalAlign: '-2px' }} /> Crear «{q.trim()}» con sus valores por 100 g</button>
+        )}
+        {creating && (
+          <NewFood name={q.trim()} onCancel={() => setCreating(false)} onCreate={(p) => { addToHistory(p); setExtra([p, ...extra]); add(p); setCreating(false); }} />
         )}
       </div>
 
@@ -194,4 +221,49 @@ function QtyInput({ label, value, onChange }: { label: string; value: number; on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
   return <input inputMode="decimal" aria-label={label} value={text} onChange={(e) => { setText(e.target.value); onChange(num(e.target.value)); }} />;
+}
+
+/** Alimento propio sin código de barras: nombre y valores por 100 g (de la etiqueta o de una tabla). */
+function NewFood({ name, onCreate, onCancel }: { name: string; onCreate: (p: Product) => void; onCancel: () => void }) {
+  const [v, setV] = useState({ name, kcal: '', prot: '', hc: '', azucar: '', grasa: '', unit: '', unitName: '' });
+  const set = (k: keyof typeof v) => (e: React.ChangeEvent<HTMLInputElement>) => setV({ ...v, [k]: e.target.value });
+  const ok = v.name.trim() && num(v.kcal) > 0;
+  const field = (k: keyof typeof v, label: string, unit: string) => (
+    <label className="field">
+      <span>{label}</span>
+      <div className="with-unit"><input inputMode="decimal" value={v[k]} onChange={set(k)} /><em>{unit}</em></div>
+    </label>
+  );
+  const create = () => {
+    const uw = num(v.unit);
+    onCreate({
+      code: `propio:${Date.now().toString(36)}`,
+      name: v.name.trim(),
+      brand: 'Alimento propio',
+      n: { kcal: num(v.kcal), prot: num(v.prot), hc: num(v.hc), azucar: v.azucar ? num(v.azucar) : null, grasa: num(v.grasa), sat: null, fibra: null, sal: null },
+      liquid: false,
+      drink: false,
+      unitWeight: uw > 0 ? uw : undefined,
+      unitName: uw > 0 ? v.unitName.trim() || 'unidad' : undefined,
+      source: 'manual',
+    });
+  };
+  return (
+    <div className="new-food">
+      <label className="field"><span>Nombre</span><input value={v.name} onChange={set('name')} /></label>
+      <p className="small muted">Valores por 100 g (de la etiqueta o de una tabla de alimentos).</p>
+      <div className="grid-2">
+        {field('kcal', 'Calorías', 'kcal')}
+        {field('prot', 'Proteína', 'g')}
+        {field('hc', 'Hidratos', 'g')}
+        {field('azucar', 'Azúcares', 'g')}
+        {field('grasa', 'Grasa', 'g')}
+        {field('unit', 'Peso de 1 unidad (opcional)', 'g')}
+      </div>
+      <div className="cita-actions">
+        <button className="btn ghost small-btn" onClick={onCancel}>Cancelar</button>
+        <button className="btn primary small-btn" disabled={!ok} onClick={create}>Crear y añadir</button>
+      </div>
+    </div>
+  );
 }

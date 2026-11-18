@@ -4,6 +4,7 @@ import { rankAlternatives, storeOf, categoryChain } from '../src/lib/alternative
 import { forGrams, gramsLeft, remaining, totals, type DiaryEntry } from '../src/lib/diary.ts';
 import { DEFAULT_PROFILE, type Profile } from '../src/lib/profile.ts';
 import type { Product } from '../src/lib/types.ts';
+import { evaluate } from '../src/lib/evaluate.ts';
 
 const P: Profile = { ...DEFAULT_PROFILE, objetivo: 'deficit', descanso: { kcal: 1560, hc: 160, prot: 120, grasa: 50 }, entreno: { kcal: 1860, hc: 190, prot: 140, grasa: 60 } };
 const mk = (name: string, n: Partial<Product['n']>, extra: Partial<Product> = {}): Product => ({
@@ -67,4 +68,30 @@ test('comida con varios ingredientes: desayuno de ejemplo', async () => {
   assert.ok(Math.abs(t.prot - 26.8) < 0.01);
   assert.ok(Math.abs(t.hc - 115.5) < 0.01);
   assert.ok(Math.abs(t.grasa - 26.7) < 0.01);
+});
+
+test('tabla de alimentos naturales: valores coherentes', async () => {
+  const { FOODS } = await import('../src/lib/foods.ts');
+  assert.ok(FOODS.length >= 60);
+  for (const f of FOODS) {
+    const n = f.n;
+    assert.ok(n.sat! <= n.grasa! + 0.01, `${f.name}: saturadas > grasa`);
+    assert.ok(n.azucar! <= n.hc! + 0.01, `${f.name}: azúcar > hidratos`);
+    const est = n.prot! * 4 + n.hc! * 4 + n.grasa! * 9 + n.fibra! * 2;
+    // Las tablas usan factores distintos según el alimento: se admite un margen amplio.
+    assert.ok(Math.abs(est - n.kcal!) / n.kcal! < 0.25, `${f.name}: kcal ${n.kcal} frente a ${est.toFixed(0)}`);
+  }
+  const codes = new Set(FOODS.map((f) => f.code));
+  assert.equal(codes.size, FOODS.length);
+});
+
+test('comida con alimentos naturales: batata y pepino', async () => {
+  const { FOODS } = await import('../src/lib/foods.ts');
+  const { mealTotals } = await import('../src/lib/diary.ts');
+  const batata = FOODS.find((f) => f.name === 'Batata asada')!;
+  const pepino = FOODS.find((f) => f.name === 'Pepino')!;
+  const t = mealTotals([{ product: batata, qty: 1, unit: 'unidad' }, { product: pepino, qty: 100, unit: 'g' }]);
+  assert.ok(Math.abs(t.kcal - (90 * 2 + 15)) < 0.01);
+  const e = evaluate(batata, P);
+  assert.equal(e.verdict, 'buena');
 });

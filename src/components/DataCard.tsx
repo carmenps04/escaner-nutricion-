@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ClipboardCopy, ClipboardPaste, Download, Upload, Smartphone } from 'lucide-react';
-import { applyBackup, backupLink, describe, downloadBackup, isIOS, isStandalone, parseBackup, type Backup } from '../lib/backup.ts';
+import { applyBackup, backupLink, describe, downloadBackup, parseBackup, type Backup } from '../lib/backup.ts';
 
 interface Props {
   toast: (m: string) => void;
@@ -15,7 +15,6 @@ export default function DataCard({ toast, pending, onPendingDone }: Props) {
   const [candidate, setCandidate] = useState<Backup | null>(null);
   const [error, setError] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
-  const standalone = isStandalone();
 
   useEffect(() => {
     if (!pending) return;
@@ -70,11 +69,6 @@ export default function DataCard({ toast, pending, onPendingDone }: Props) {
   return (
     <section className="card">
       <h2 className="card-title"><Smartphone size={15} /> Tus datos</h2>
-      {!standalone && isIOS() && (
-        <p className="note warn-note">
-          Estás usando la app desde Safari. Si la añades a la pantalla de inicio, allí empieza vacía: antes, pulsa «Copiar mis datos»; después, ábrela desde el icono y pulsa «Pegar datos».
-        </p>
-      )}
       <p className="small muted">Se guardan solo en este dispositivo. Para pasarlos a otro sitio (la app de inicio, otro móvil o el ordenador), cópialos aquí y pégalos allí.</p>
 
       <div className="data-actions">
