@@ -18,6 +18,29 @@ export interface DiaryEntry {
   grasa: number;
   /** Producto completo, para poder volver a valorarlo. */
   product?: Product;
+  /** Comidas con varios ingredientes (desayuno: leche + galletas…). */
+  items?: MealItem[];
+}
+
+/** Un ingrediente de una comida: un producto ya escaneado y la cantidad tomada. */
+export interface MealItem {
+  product: Product;
+  /** Cantidad en la unidad elegida. */
+  qty: number;
+  /** 'unidad' = unidades del producto (galletas…); 'g' = gramos o ml. */
+  unit: 'unidad' | 'g';
+}
+
+/** Gramos (o ml) de un ingrediente. */
+export function itemGrams(i: MealItem): number {
+  return i.unit === 'unidad' && i.product.unitWeight ? i.qty * i.product.unitWeight : i.qty;
+}
+
+export function mealTotals(items: MealItem[]): Totals {
+  return items.reduce((t, i) => {
+    const x = forGrams(i.product.n, itemGrams(i));
+    return { kcal: t.kcal + x.kcal, prot: t.prot + x.prot, hc: t.hc + x.hc, grasa: t.grasa + x.grasa };
+  }, { kcal: 0, prot: 0, hc: 0, grasa: 0 });
 }
 
 export interface Totals {
@@ -53,6 +76,7 @@ export function loadDay(day = dayKey()): DiaryEntry[] {
 }
 
 export function addEntry(e: Omit<DiaryEntry, 'id' | 'time'> & { time?: string }, day = dayKey()): void {
+  if (!e.time) delete e.time;
   const all = readAll();
   const now = new Date();
   const time = e.time ?? `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;

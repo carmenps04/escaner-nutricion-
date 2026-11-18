@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Dumbbell, Plus, Sofa, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Dumbbell, PenLine, Plus, Sofa, Trash2 } from 'lucide-react';
+import MealBuilder from './MealBuilder.tsx';
 import type { Profile } from '../lib/profile.ts';
 import type { Product } from '../lib/types.ts';
 import { dowOf, type Today } from '../lib/training.ts';
@@ -21,7 +22,7 @@ interface Props {
 export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
   const [date, setDate] = useState(() => new Date());
   const [version, setVersion] = useState(0);
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState<null | 'meal' | 'manual'>(null);
   const key = dayKey(date);
   const isToday = key === dayKey();
   const entries = loadDay(key);
@@ -36,7 +37,7 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
     const d = new Date(date);
     d.setDate(d.getDate() + days);
     setDate(d);
-    setAdding(false);
+    setAdding(null);
   };
   const label = isToday ? 'Hoy' : date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -76,20 +77,26 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
       </section>
 
       <section className="card">
-        <div className="card-head-row">
-          <h2 className="card-title">Comidas</h2>
-          {!adding && <button className="link" onClick={() => setAdding(true)}><Plus size={14} style={{ verticalAlign: '-2px' }} /> Añadir a mano</button>}
-        </div>
-        {adding && <ManualEntry onCancel={() => setAdding(false)} onAdd={(e) => { addEntry(e, key); setAdding(false); refresh(); toast('Añadido al diario'); }} />}
+        <h2 className="card-title">Comidas</h2>
+        {!adding && (
+          <div className="diary-actions">
+            <button className="btn primary" onClick={() => setAdding('meal')}><Plus size={16} /> Añadir comida</button>
+            <button className="btn ghost" onClick={() => setAdding('manual')}><PenLine size={16} /> Valores a mano</button>
+          </div>
+        )}
+        {adding === 'meal' && (
+          <MealBuilder onCancel={() => setAdding(null)} onSave={(e) => { addEntry(e, key); setAdding(null); refresh(); toast('Comida añadida al diario'); }} />
+        )}
+        {adding === 'manual' && <ManualEntry onCancel={() => setAdding(null)} onAdd={(e) => { addEntry(e, key); setAdding(null); refresh(); toast('Añadido al diario'); }} />}
         {entries.length ? (
           <div className="list">
             {entries.map((e) => <EntryRow key={e.id} e={e} day={key} onOpen={onOpen} onChange={refresh} />)}
           </div>
         ) : (
-          !adding && <p className="empty">Aún no has apuntado nada {isToday ? 'hoy' : 'este día'}. Desde el resultado de un producto pulsa «Lo he comido», o añade a mano lo que no escaneas.</p>
+          !adding && <p className="empty">Aún no has apuntado nada {isToday ? 'hoy' : 'este día'}.</p>
         )}
       </section>
-      <p className="small muted">Para que el total sea real, apunta también lo que comes sin escanear (las comidas del menú), con «Añadir a mano». La app usa lo que te queda para ajustar la cantidad máxima de cada producto.</p>
+      <p className="small muted">«Añadir comida» suma los productos que ya has escaneado con la cantidad que tomes. Lo que no tengas escaneado (por ejemplo, un plato casero) apúntalo con «Valores a mano». La app usa lo que te queda del día para ajustar la cantidad máxima de cada producto.</p>
     </div>
   );
 }
@@ -120,7 +127,17 @@ function Macro({ label, value, max, goal }: { label: string; value: number; max:
 function EntryRow({ e, day, onOpen, onChange }: { e: DiaryEntry; day: string; onOpen: (p: Product) => void; onChange: () => void }) {
   const [editing, setEditing] = useState(false);
   const [qty, setQty] = useState(String(e.units ?? e.grams ?? ''));
-  const qtyText = e.units != null ? `${fmt(e.units, 1)} ${e.units === 1 ? e.unitName : plural(e.unitName ?? 'unidad')}` : e.grams != null ? `${fmt(e.grams, 0)} ${e.product?.liquid ? 'ml' : 'g'}` : '';
+  const qtyText = e.items
+    ? `${e.items.length} ${e.items.length === 1 ? 'producto' : 'productos'}`
+    : e.units != null ? `${fmt(e.units, 1)} ${e.units === 1 ? e.unitName : plural(e.unitName ?? 'unidad')}` : e.grams != null ? `${fmt(e.grams, 0)} ${e.product?.liquid ? 'ml' : 'g'}` : '';
+
+  if (editing && e.items) {
+    return (
+      <div className="list-item entry">
+        <MealBuilder initial={e} onCancel={() => setEditing(false)} onSave={(m) => { updateEntry(e.id, m, day); setEditing(false); onChange(); }} />
+      </div>
+    );
+  }
 
   const save = () => {
     const q = num(qty);
@@ -134,10 +151,18 @@ function EntryRow({ e, day, onOpen, onChange }: { e: DiaryEntry; day: string; on
   return (
     <div className="list-item entry">
       <span className="entry-time">{e.time}</span>
-      <button className="entry-main" onClick={() => (e.product ? (e.grams != null ? setEditing(!editing) : onOpen(e.product)) : undefined)}>
-        <span className="list-name">{e.name}<small>{[qtyText, `${fmt(e.kcal, 0)} kcal`, `${fmt(e.prot, 0)} g prot.`].filter(Boolean).join(' · ')}</small></span>
+      <button className="entry-main" onClick={() => (e.items || (e.product && e.grams != null) ? setEditing(!editing) : undefined)}>
+        <span className="list-name">
+          {e.name}
+          <small>{[qtyText, `${fmt(e.kcal, 0)} kcal`, `${fmt(e.prot, 0)} g prot.`].filter(Boolean).join(' · ')}</small>
+          {e.items && (
+            <small className="entry-items">
+              {e.items.map((i) => `${i.unit === 'unidad' ? `${fmt(i.qty, 1)} ${i.qty === 1 ? i.product.unitName ?? 'unidad' : plural(i.product.unitName ?? 'unidad')}` : `${fmt(i.qty, 0)} ${i.product.liquid ? 'ml' : 'g'}`} ${i.product.name}`).join(' + ')}
+            </small>
+          )}
+        </span>
       </button>
-      {editing && (
+      {editing && !e.items && (
         <div className="entry-edit">
           <div className="with-unit">
             <input inputMode="decimal" value={qty} onChange={(ev) => setQty(ev.target.value)} aria-label="Cantidad" />

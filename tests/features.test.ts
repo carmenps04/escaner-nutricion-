@@ -50,3 +50,21 @@ test('diario: totales, lo que queda y cuánto cabe', () => {
   const g = forGrams(digestive.n, 28);
   for (const [k, v] of Object.entries({ kcal: 131.6, prot: 1.96, hc: 18.2, grasa: 5.04 })) assert.ok(Math.abs(g[k as keyof typeof g] - v) < 1e-6, k);
 });
+
+test('comida con varios ingredientes: desayuno de ejemplo', async () => {
+  const { mealTotals, itemGrams } = await import('../src/lib/diary.ts');
+  const leche = mk('Leche desnatada', { kcal: 35, prot: 3.4, hc: 4.9, azucar: 4.9, grasa: 0.3, sat: 0.2, fibra: 0, sal: 0.13 }, { liquid: true, nova: 1 });
+  const galletas = { ...digestive, unitWeight: 14, unitName: 'galleta' };
+  const items = [
+    { product: leche, qty: 250, unit: 'g' as const },
+    { product: galletas, qty: 10, unit: 'unidad' as const },
+    { product: leche, qty: 250, unit: 'g' as const },
+  ];
+  assert.equal(itemGrams(items[1]), 140);
+  const t = mealTotals(items);
+  // leche 500 ml: 175 kcal, 17 g prot., 24,5 g HC, 1,5 g grasa; galletas 140 g: 658 kcal, 9,8 g prot., 91 g HC, 25,2 g grasa
+  assert.ok(Math.abs(t.kcal - 833) < 0.01);
+  assert.ok(Math.abs(t.prot - 26.8) < 0.01);
+  assert.ok(Math.abs(t.hc - 115.5) < 0.01);
+  assert.ok(Math.abs(t.grasa - 26.7) < 0.01);
+});
