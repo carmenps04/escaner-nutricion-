@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Dumbbell, PenLine, Plus, Sofa, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Dumbbell, Pencil, PenLine, Plus, Sofa, Trash2 } from 'lucide-react';
 import MealBuilder from './MealBuilder.tsx';
 import type { Profile } from '../lib/profile.ts';
 import type { Product } from '../lib/types.ts';
@@ -182,6 +182,7 @@ function EntryRow({ e, day, entreno, onDraft, onOpen, onChange }: { e: DiaryEntr
   const target = useMemo(() => mealTarget(loadPlan(), e.name, entreno), [e.name, entreno]);
   const [editing, setEditing] = useState(false);
   const [qty, setQty] = useState(String(e.units ?? e.grams ?? '').replace('.', ','));
+  const [time, setTime] = useState(e.time);
   const unitOf = (p?: Product) => (p?.liquid ? 'ml' : 'g');
   const single = !e.items && e.product && e.grams != null;
   const manual = !e.items && !e.product;
@@ -208,7 +209,7 @@ function EntryRow({ e, day, entreno, onDraft, onOpen, onChange }: { e: DiaryEntr
     const q = num(qty);
     if (q <= 0 || !e.product) return setEditing(false);
     const grams = e.units != null && e.product.unitWeight ? q * e.product.unitWeight : q;
-    updateEntry(e.id, { grams, units: e.units != null ? q : undefined, ...forGrams(e.product.n, grams) }, day);
+    updateEntry(e.id, { grams, units: e.units != null ? q : undefined, time: time || e.time, ...forGrams(e.product.n, grams) }, day);
     setEditing(false);
     onChange();
   };
@@ -220,6 +221,9 @@ function EntryRow({ e, day, entreno, onDraft, onOpen, onChange }: { e: DiaryEntr
         <button className="entry-main" onClick={() => setEditing(!editing)} aria-expanded={editing}>
           <span className="entry-title">{e.name}</span>
           <span className="entry-meta">{meta}</span>
+        </button>
+        <button className={`icon-btn ${editing ? 'on' : ''}`} aria-label={`Editar ${e.name}`} aria-expanded={editing} onClick={() => setEditing(!editing)}>
+          <Pencil size={16} />
         </button>
         <button className="icon-btn" aria-label={`Borrar ${e.name}`} onClick={() => { removeEntry(e.id, day); onChange(); }}>
           <Trash2 size={16} />
@@ -254,6 +258,7 @@ function EntryRow({ e, day, entreno, onDraft, onOpen, onChange }: { e: DiaryEntr
               <input inputMode="decimal" value={qty} onChange={(ev) => setQty(ev.target.value)} aria-label="Cantidad" />
               <em>{e.units != null ? plural(e.unitName ?? 'unidad') : unitOf(e.product)}</em>
             </div>
+            <input type="time" value={time} onChange={(ev) => setTime(ev.target.value)} aria-label="Hora" className="entry-edit-time" />
             <button className="btn primary small-btn" onClick={save}>Guardar</button>
           </div>
           <button className="link" onClick={() => onOpen(e.product!)}>Ver la valoración del producto</button>
@@ -263,15 +268,19 @@ function EntryRow({ e, day, entreno, onDraft, onOpen, onChange }: { e: DiaryEntr
   );
 }
 
-function ManualEntry({ onAdd, onCancel, initial, onDraft }: { onAdd: (e: Omit<DiaryEntry, 'id' | 'time'>) => void; onCancel: () => void; initial?: DiaryEntry; onDraft?: (t: Totals | null) => void }) {
+function ManualEntry({ onAdd, onCancel, initial, onDraft }: { onAdd: (e: Omit<DiaryEntry, 'id' | 'time'> & { time?: string }) => void; onCancel: () => void; initial?: DiaryEntry; onDraft?: (t: Totals | null) => void }) {
   const str = (x?: number) => (x == null ? '' : String(Math.round(x * 10) / 10).replace('.', ','));
+  const [time, setTime] = useState(() => initial?.time ?? new Date().toTimeString().slice(0, 5));
   const [v, setV] = useState({ name: initial?.name ?? '', kcal: str(initial?.kcal), prot: str(initial?.prot), hc: str(initial?.hc), grasa: str(initial?.grasa) });
   const set = (k: keyof typeof v) => (ev: React.ChangeEvent<HTMLInputElement>) => setV({ ...v, [k]: ev.target.value });
   const ok = v.name.trim() && num(v.kcal) > 0;
   useDraft(onDraft, num(v.kcal) > 0 ? { kcal: num(v.kcal), prot: num(v.prot), hc: num(v.hc), grasa: num(v.grasa) } : null);
   return (
     <div className="cita-editor">
-      <label className="field"><span>Qué has comido</span><input value={v.name} onChange={set('name')} placeholder="Comida del menú: pollo con arroz" /></label>
+      <div className="manual-head">
+        <label className="field"><span>Qué has comido</span><input value={v.name} onChange={set('name')} placeholder="Comida del menú: pollo con arroz" /></label>
+        <label className="field"><span>Hora</span><input type="time" value={time} onChange={(ev) => setTime(ev.target.value)} /></label>
+      </div>
       <div className="grid-2">
         <label className="field"><span>Calorías</span><div className="with-unit"><input inputMode="decimal" value={v.kcal} onChange={set('kcal')} /><em>kcal</em></div></label>
         <label className="field"><span>Proteína</span><div className="with-unit"><input inputMode="decimal" value={v.prot} onChange={set('prot')} /><em>g</em></div></label>
@@ -280,7 +289,7 @@ function ManualEntry({ onAdd, onCancel, initial, onDraft }: { onAdd: (e: Omit<Di
       </div>
       <div className="cita-actions">
         <button className="btn ghost small-btn" onClick={onCancel}>Cancelar</button>
-        <button className="btn primary small-btn" disabled={!ok} onClick={() => onAdd({ name: v.name.trim(), grams: null, kcal: num(v.kcal), prot: num(v.prot), hc: num(v.hc), grasa: num(v.grasa) })}>{initial ? 'Guardar' : 'Añadir'}</button>
+        <button className="btn primary small-btn" disabled={!ok} onClick={() => onAdd({ name: v.name.trim(), time: time || undefined, grams: null, kcal: num(v.kcal), prot: num(v.prot), hc: num(v.hc), grasa: num(v.grasa) })}>{initial ? 'Guardar' : 'Añadir'}</button>
       </div>
     </div>
   );
