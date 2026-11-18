@@ -1,6 +1,6 @@
 # Escáner nutricional
 
-Web app (PWA) para escanear productos del supermercado y saber si encajan en el plan del dietista: veredicto (buena opción, regular u ocasional), cantidad máxima por toma en días con y sin entreno, y frecuencia recomendada.
+Web app (PWA) para escanear productos del supermercado y saber si encajan en el plan del nutricionista: veredicto (buena opción, regular u ocasional), cantidad máxima por toma en días con y sin entreno, y frecuencia recomendada.
 
 ## Cómo funciona
 
