@@ -32,6 +32,8 @@ export interface Product {
   categories?: string[];
   /** Tiendas de Open Food Facts (mercadona, lidl…). */
   stores?: string[];
+  /** Cantidad del envase según Open Food Facts («425 g», «1 l»). */
+  quantity?: string;
   source: 'openfoodfacts' | 'foto' | 'manual';
 }
 

@@ -1,6 +1,7 @@
 // Historial de productos y productos corregidos a mano (todo en el móvil, localStorage).
 
 import type { Product } from './types.ts';
+import { isLiquid } from './off.ts';
 
 const HIST = 'escaner.historial.v1';
 const CUSTOM = 'escaner.propios.v1';
@@ -25,8 +26,18 @@ function write(key: string, value: unknown): void {
   } catch { /* almacenamiento lleno o bloqueado */ }
 }
 
+/**
+ * Las versiones anteriores marcaban como bebida (ml) productos sólidos como la pasta, porque Open Food
+ * Facts los clasifica en «Plant-based foods and beverages». Al leer, se recalcula con la regla actual.
+ */
+function fixUnits(p: Product): Product {
+  if (p.source !== 'openfoodfacts' || !p.categories?.length) return p;
+  const liquid = isLiquid(p.categories, p.quantity);
+  return liquid === p.liquid ? p : { ...p, liquid };
+}
+
 export function loadHistory(): HistoryItem[] {
-  return read<HistoryItem[]>(HIST, []);
+  return read<HistoryItem[]>(HIST, []).map((h) => ({ ...h, product: fixUnits(h.product) }));
 }
 
 const sameProduct = (a: Product, b: Product) => (a.code && b.code ? a.code === b.code : a.name === b.name);
@@ -43,7 +54,8 @@ export function removeFromHistory(p: Product): void {
 
 /** Productos con código que se han completado o corregido a mano: se usan antes que Open Food Facts. */
 export function getCustom(code: string): Product | null {
-  return read<Record<string, Product>>(CUSTOM, {})[code] ?? null;
+  const p = read<Record<string, Product>>(CUSTOM, {})[code];
+  return p ? fixUnits(p) : null;
 }
 
 export function saveCustom(p: Product): void {

@@ -15,6 +15,22 @@ export type OffResult =
 
 const v = (x: unknown): number | null => (typeof x === 'number' && isFinite(x) ? x : typeof x === 'string' && x !== '' && isFinite(+x) ? +x : null);
 
+/** Categorías de Open Food Facts que son bebidas (leche, zumos, refrescos, bebidas vegetales…). */
+const LIQUID_CATS = /^en:(beverages|drinks|waters|milks|.*-milks|plant-based-milk-alternatives|.*-beverages|juices|fruit-juices|.*-juices|sodas|soft-drinks|.*-drinks|drinkable-yogurts|coffee-drinks|tea-based-beverages)$/;
+const NOT_LIQUID_CATS = /^en:(plant-based-foods-and-beverages|.*-foods-and-beverages|beverages-and-beverages-preparations|.*-preparations|.*-powders|powdered-.*|instant-.*)$/;
+
+/**
+ * ¿Se mide en ml? Manda la unidad de la cantidad del envase («1 l», «500 g»). Si no la hay, se mira
+ * la categoría, con cuidado: Open Food Facts mete la pasta, el arroz o el aceite en «Plant-based foods
+ * and beverages», que no es una bebida.
+ */
+export function isLiquid(cats: string[], quantity?: string | null): boolean {
+  const q = (quantity ?? '').toLowerCase();
+  if (/\d\s*(ml|cl|l|litros?)\b/.test(q)) return true;
+  if (/\d\s*(g|gr|kg|gramos?)\b/.test(q)) return false;
+  return cats.some((c) => LIQUID_CATS.test(c) && !NOT_LIQUID_CATS.test(c));
+}
+
 export function fromOff(code: string, p: Record<string, any>): Product {
   const nu = p.nutriments ?? {};
   let kcal = v(nu['energy-kcal_100g']);
@@ -31,7 +47,7 @@ export function fromOff(code: string, p: Record<string, any>): Product {
     sal: v(nu.salt_100g),
   };
   const cats: string[] = p.categories_tags ?? [];
-  const liquid = cats.some((c) => /beverages|drinks|bebidas|milks/.test(c)) || /\bml\b|\bcl\b|\d\s*l\b/i.test(p.quantity ?? '');
+  const liquid = isLiquid(cats, p.quantity);
   const unit = parseUnit(p.serving_size, p.quantity);
   return {
     code,
@@ -46,6 +62,7 @@ export function fromOff(code: string, p: Record<string, any>): Product {
     unitName: unit?.name,
     categories: cats,
     stores: Array.isArray(p.stores_tags) ? p.stores_tags : undefined,
+    quantity: typeof p.quantity === 'string' ? p.quantity : undefined,
     source: 'openfoodfacts',
   };
 }

@@ -155,3 +155,15 @@ test('kcal ilegibles: se calculan con los macros', () => {
   assert.equal(r.kcalEstimated, true);
   assert.equal(r.n.kcal, 458); // 7,5·4 + 63·4 + 18·9 + 7,1·2
 });
+
+test('sólido o líquido: la pasta va en gramos y la leche en ml', async () => {
+  const { isLiquid } = await import('../src/lib/off.ts');
+  // Open Food Facts mete la pasta en «Plant-based foods and beverages»
+  assert.equal(isLiquid(['en:plant-based-foods-and-beverages', 'en:plant-based-foods', 'en:cereals-and-potatoes', 'en:pastas'], '500 g'), false);
+  assert.equal(isLiquid(['en:plant-based-foods-and-beverages', 'en:plant-based-foods', 'en:pastas'], undefined), false);
+  assert.equal(isLiquid(['en:dairies', 'en:milks', 'en:skimmed-milks'], '1 l'), true);
+  assert.equal(isLiquid(['en:beverages', 'en:plant-based-beverages', 'en:oat-based-drinks'], undefined), true);
+  assert.equal(isLiquid(['en:beverages', 'en:sodas'], '33 cl'), true);
+  assert.equal(isLiquid(['en:beverages-and-beverages-preparations', 'en:cocoa-and-chocolate-powders'], undefined), false);
+  assert.equal(isLiquid([], '425 g'), false);
+});
