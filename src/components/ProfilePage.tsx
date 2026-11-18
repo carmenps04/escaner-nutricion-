@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Camera, Dumbbell, Link2, Loader2, Sofa } from 'lucide-react';
 import {
-  OBJETIVOS, imc, loadCitas, macroKcal, racionesToGrams, saveProfile,
+  OBJETIVOS, imc, macroKcal, racionesToGrams, saveProfile, syncProfileWithCitas,
   type DayPlan, type Objetivo, type Profile,
 } from '../lib/profile.ts';
 import { parseDietSheet } from '../lib/parseDietSheet.ts';
 import { readImage, statusText } from '../lib/ocr.ts';
 import { fmt } from '../lib/evaluate.ts';
+import CitasCard from './CitasCard.tsx';
 
 const num = (s: string) => {
   const t = s.replace(',', '.').trim();
@@ -26,7 +27,6 @@ export default function ProfilePage({ profile, configured, onSaved, toast }: Pro
   const [busy, setBusy] = useState<string | null>(null);
   const [found, setFound] = useState<string[] | null>(null);
   const file = useRef<HTMLInputElement>(null);
-  const citas = loadCitas();
   const dirty = !configured || JSON.stringify(p) !== JSON.stringify(profile);
 
   const set = <K extends keyof Profile>(k: K, v: Profile[K]) => setP((old) => ({ ...old, [k]: v }));
@@ -134,24 +134,7 @@ export default function ProfilePage({ profile, configured, onSaved, toast }: Pro
             </div>
           </section>
 
-          {citas.length > 0 && (
-            <section className="card">
-              <h2 className="card-title">Evolución por citas</h2>
-              <table className="table">
-                <thead><tr><th>Fecha</th><th>Peso</th><th>% grasa</th><th>MLG</th></tr></thead>
-                <tbody>
-                  {[...citas].reverse().map((c) => (
-                    <tr key={c.fecha}>
-                      <td>{new Date(c.fecha + 'T12:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: '2-digit' })}</td>
-                      <td>{fmt(c.peso)} kg</td>
-                      <td>{fmt(c.pctGrasa)} %</td>
-                      <td>{fmt(c.mlg)} kg</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-          )}
+          <CitasCard onChange={() => onSaved(syncProfileWithCitas(profile))} />
 
           {configured && (
             <button className="link" onClick={shareLink}><Link2 size={14} style={{ verticalAlign: '-2px' }} /> Copiar enlace para pasar el perfil a otro dispositivo</button>

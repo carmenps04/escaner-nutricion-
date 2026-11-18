@@ -139,3 +139,33 @@ export function loadCitas(): CitaResumen[] {
   } catch { /* ignorar */ }
   return [];
 }
+
+function writeCitas(list: CitaResumen[]): void {
+  try {
+    localStorage.setItem(HIST, JSON.stringify([...list].sort((a, b) => a.fecha.localeCompare(b.fecha))));
+  } catch { /* ignorar */ }
+}
+
+/** Cambia una cita. Si la nueva fecha ya existía, la sustituye (no quedan dos citas el mismo día). */
+export function updateCita(oldFecha: string, c: CitaResumen): void {
+  writeCitas([...loadCitas().filter((x) => x.fecha !== oldFecha && x.fecha !== c.fecha), c]);
+}
+
+export function deleteCita(fecha: string): void {
+  writeCitas(loadCitas().filter((x) => x.fecha !== fecha));
+}
+
+/**
+ * Tras editar o borrar citas, la composición corporal del perfil debe ser la de la cita más reciente.
+ * Devuelve el perfil actualizado (o el mismo si no hay citas).
+ */
+export function syncProfileWithCitas(p: Profile): Profile {
+  const list = loadCitas();
+  const last = list[list.length - 1];
+  if (!last) return p;
+  const next = { ...p, fecha: last.fecha, peso: last.peso, pctGrasa: last.pctGrasa, mlg: last.mlg, kgGrasa: last.kgGrasa };
+  try {
+    localStorage.setItem(KEY, JSON.stringify(next));
+  } catch { /* ignorar */ }
+  return next;
+}
