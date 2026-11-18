@@ -504,3 +504,4 @@ details.how:not([open]) { gap: 0; }
 .account-state { display: flex; align-items: center; gap: 6px; font-size: 14px; margin: 0; color: var(--accent-ink); }
 .account-state.over { color: var(--bad-ink); }
 .account-state svg { flex: 0 0 auto; }
+.ok-text { color: var(--accent-ink); font-weight: 600; }

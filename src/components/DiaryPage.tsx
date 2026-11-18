@@ -82,11 +82,11 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
           <div>
             <strong>{fmt(t.kcal, 0)}</strong> <span>/ {fmt(plan.kcal, 0)} kcal</span>
           </div>
-          <span className={left.kcal < 0 ? 'over' : 'muted'}>
+          <span className={tooMuch(t.kcal, plan.kcal, TOL.kcal) ? 'over' : 'muted'}>
             {left.kcal >= 0 ? `Te quedan ${fmt(left.kcal, 0)} kcal` : `Te has pasado ${fmt(-left.kcal, 0)} kcal`}
           </span>
         </div>
-        <Bar value={t.kcal} before={before.kcal} max={plan.kcal} big />
+        <Bar value={t.kcal} before={before.kcal} max={plan.kcal} big tol={TOL.kcal} />
         {draft && <p className="preview-note">Con la comida que estás añadiendo (+{fmt(t.kcal - before.kcal, 0)} kcal). Aún no está guardada.</p>}
         <div className="macros">
           <Macro previewing={!!draft} label="Proteína" value={t.prot} before={before.prot} max={plan.prot} goal="reach" />
@@ -125,14 +125,22 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
 const sum = (a: Totals, b: Totals): Totals => ({ kcal: a.kcal + b.kcal, prot: a.prot + b.prot, hc: a.hc + b.hc, grasa: a.grasa + b.grasa });
 
 /** Barra de progreso; si hay comida en preparación, la parte nueva va en otro tono. */
-function Bar({ value, before = value, max, big }: { value: number; before?: number; max: number; big?: boolean }) {
+/**
+ * Cuándo algo sale en rojo: solo si es malo para el objetivo. Pasarse de proteína no se marca (es lo que
+ * hay que alcanzar en déficit); hidratos y grasa, solo si se pasan más de un 5 % (las calorías, un 2 %).
+ */
+const TOL = { macro: 0.05, kcal: 0.02 };
+const tooMuch = (value: number, max: number, tol: number) => max > 0 && value > max * (1 + tol);
+
+function Bar({ value, before = value, max, big, reach, tol = TOL.macro }: { value: number; before?: number; max: number; big?: boolean; reach?: boolean; tol?: number }) {
   const pct = (x: number) => (max > 0 ? Math.max(0, Math.min(100, (x / max) * 100)) : 0);
   const base = pct(Math.min(before, value));
   const add = pct(value) - base;
+  const bad = (v: number) => !reach && tooMuch(v, max, tol);
   return (
     <div className={`bar ${big ? 'big' : ''}`} aria-hidden>
-      <span style={{ width: `${base}%` }} className={before > max ? 'over' : ''} />
-      {add > 0 && <span style={{ width: `${add}%` }} className={`add ${value > max ? 'over' : ''}`} />}
+      <span style={{ width: `${base}%` }} className={bad(before) ? 'over' : ''} />
+      {add > 0 && <span style={{ width: `${add}%` }} className={`add ${bad(value) ? 'over' : ''}`} />}
     </div>
   );
 }
@@ -140,15 +148,16 @@ function Bar({ value, before = value, max, big }: { value: number; before?: numb
 function Macro({ label, value, before = value, max, goal, previewing }: { label: string; value: number; before?: number; max: number; goal?: 'reach'; previewing?: boolean }) {
   const left = max - value;
   const add = value - before;
+  const reach = goal === 'reach';
+  const bad = !reach && tooMuch(value, max, TOL.macro);
+  const text = left > 0.5 ? `faltan ${fmt(left, 0)} g` : reach ? 'objetivo cumplido' : bad ? `te pasas ${fmt(-left, 0)} g` : 'en tu objetivo';
   return (
     <div className="macro">
       <span className="macro-label">{label}</span>
-      <Bar value={value} before={before} max={max} />
+      <Bar value={value} before={before} max={max} reach={reach} />
       <span className="macro-val"><b>{fmt(value, 0)}</b> / {fmt(max, 0)} g</span>
       {previewing && <em className="macro-add">{add < 0 ? '−' : '+'}{fmt(Math.abs(add), 0)} g</em>}
-      <small className={left < 0 && goal !== 'reach' ? 'over' : 'muted'}>
-        {left >= 0 ? `faltan ${fmt(left, 0)} g` : goal === 'reach' ? 'objetivo cumplido' : `+${fmt(-left, 0)} g`}
-      </small>
+      <small className={bad ? 'over' : left <= 0.5 ? 'ok-text' : 'muted'}>{text}</small>
     </div>
   );
 }
@@ -165,12 +174,12 @@ function DraftStrip({ t, before, plan }: { t: Totals; before: Totals; plan: { kc
       <div className="draft-inner">
         <div className="draft-kcal">
           <span>Con esta comida</span>
-          <b className={t.kcal > plan.kcal ? 'over' : ''}>{fmt(t.kcal, 0)}</b> / {fmt(plan.kcal, 0)} kcal
+          <b className={tooMuch(t.kcal, plan.kcal, TOL.kcal) ? 'over' : ''}>{fmt(t.kcal, 0)}</b> / {fmt(plan.kcal, 0)} kcal
         </div>
-        <Bar value={t.kcal} before={before.kcal} max={plan.kcal} />
+        <Bar value={t.kcal} before={before.kcal} max={plan.kcal} tol={TOL.kcal} />
         <div className="draft-macros">
           {items.map(([l, v, m]) => (
-            <span key={l} className={l !== 'Prot.' && v > m ? 'over' : ''}><small>{l}</small> <b>{fmt(v, 0)}</b>/{fmt(m, 0)}</span>
+            <span key={l} className={l !== 'Prot.' && tooMuch(v, m, TOL.macro) ? 'over' : ''}><small>{l}</small> <b>{fmt(v, 0)}</b>/{fmt(m, 0)}</span>
           ))}
         </div>
       </div>
@@ -247,7 +256,7 @@ function EntryRow({ e, day, entreno, onDraft, onOpen, onChange }: { e: DiaryEntr
         <div className="entry-vs">
           <span className="entry-vs-title">Plan: {target.raciones}</span>
           <VsPlan label="HC" value={e.hc} goal={target.hc} />
-          <VsPlan label="Prot." value={e.prot} goal={target.prot} />
+          <VsPlan label="Prot." value={e.prot} goal={target.prot} reach />
           <VsPlan label="Grasa" value={e.grasa} goal={target.grasa} />
         </div>
       )}

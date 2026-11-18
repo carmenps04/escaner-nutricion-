@@ -244,7 +244,7 @@ export default function MealBuilder({ initial, entreno, onDraft, onSave, onCance
         {target ? (
           <div className="meal-vs">
             <VsPlan label="Hidratos" value={total.hc} goal={target.hc} />
-            <VsPlan label="Proteína" value={total.prot} goal={target.prot} />
+            <VsPlan label="Proteína" value={total.prot} goal={target.prot} reach />
             <VsPlan label="Grasa" value={total.grasa} goal={target.grasa} />
           </div>
         ) : (
@@ -270,8 +270,9 @@ export function useDraft(onDraft: ((t: Totals | null) => void) | undefined, t: T
 }
 
 /** Lo que lleva la comida frente a lo que marca el plan del dietista (±15 % se da por bueno). */
-export function VsPlan({ label, value, goal }: { label: string; value: number; goal: number }) {
-  const tone = goal <= 0 ? '' : value > goal * 1.15 ? 'high' : value >= goal * 0.85 ? 'ok' : 'muted';
+export function VsPlan({ label, value, goal, reach }: { label: string; value: number; goal: number; reach?: boolean }) {
+  // La proteína se marca en verde al llegar, aunque se pase; hidratos y grasa, en ámbar si se pasan.
+  const tone = goal <= 0 ? '' : !reach && value > goal * 1.15 ? 'high' : value >= goal * 0.85 ? 'ok' : 'muted';
   return (
     <span className={`vs ${tone}`}>
       <small>{label}</small>
