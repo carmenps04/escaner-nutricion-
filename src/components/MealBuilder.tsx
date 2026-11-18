@@ -99,6 +99,10 @@ export default function MealBuilder({ initial, onSave, onCancel }: Props) {
                   )}
                   <span className="meal-item-kcal">{fmt(t.kcal, 0)} kcal</span>
                 </div>
+                <div className="meal-item-detail">
+                  {it.unit === 'unidad' ? `${fmt(g, 0)} ${u} (1 ${it.product.unitName ?? 'unidad'} = ${fmt(it.product.unitWeight!, 1)} ${u})` : `${fmt(g, 0)} ${u}`}
+                  {' · '}{fmt(it.product.n.kcal ?? 0, 0)} kcal por 100 {u}
+                </div>
               </div>
             );
           })}

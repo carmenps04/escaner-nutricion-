@@ -4,7 +4,7 @@ import MealBuilder from './MealBuilder.tsx';
 import type { Profile } from '../lib/profile.ts';
 import type { Product } from '../lib/types.ts';
 import { dowOf, type Today } from '../lib/training.ts';
-import { addEntry, dayKey, loadDay, remaining, removeEntry, totals, updateEntry, forGrams, type DiaryEntry } from '../lib/diary.ts';
+import { addEntry, dayKey, itemGrams, loadDay, remaining, removeEntry, totals, updateEntry, forGrams, type DiaryEntry } from '../lib/diary.ts';
 import { fmt, plural } from '../lib/evaluate.ts';
 
 const num = (s: string) => {
@@ -157,7 +157,12 @@ function EntryRow({ e, day, onOpen, onChange }: { e: DiaryEntry; day: string; on
           <small>{[qtyText, `${fmt(e.kcal, 0)} kcal`, `${fmt(e.prot, 0)} g prot.`].filter(Boolean).join(' · ')}</small>
           {e.items && (
             <small className="entry-items">
-              {e.items.map((i) => `${i.unit === 'unidad' ? `${fmt(i.qty, 1)} ${i.qty === 1 ? i.product.unitName ?? 'unidad' : plural(i.product.unitName ?? 'unidad')}` : `${fmt(i.qty, 0)} ${i.product.liquid ? 'ml' : 'g'}`} ${i.product.name}`).join(' + ')}
+              {e.items.map((i) => {
+                const u = i.product.liquid ? 'ml' : 'g';
+                const g = itemGrams(i);
+                const q = i.unit === 'unidad' ? `${fmt(i.qty, 1)} ${i.qty === 1 ? i.product.unitName ?? 'unidad' : plural(i.product.unitName ?? 'unidad')} (${fmt(g, 0)} ${u})` : `${fmt(g, 0)} ${u}`;
+                return `${q} ${i.product.name}: ${fmt(forGrams(i.product.n, g).kcal, 0)} kcal`;
+              }).join(' · ')}
             </small>
           )}
         </span>

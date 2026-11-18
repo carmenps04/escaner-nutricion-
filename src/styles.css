@@ -346,3 +346,4 @@ svg { flex: none; }
 .meal-total span { font-size: 13px; color: var(--muted); }
 .entry-items { color: var(--muted); white-space: normal; margin-top: 2px; }
 .entry .list-name { white-space: normal; }
+.meal-item-detail { font-size: 12px; color: var(--muted); }
