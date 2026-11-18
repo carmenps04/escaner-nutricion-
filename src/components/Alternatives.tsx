@@ -23,6 +23,7 @@ export default function Alternatives({ product, profile, hoy, onOpen, onCompare 
   const key = `${product.code ?? product.name}|${onlyStore && store ? store : '*'}|${profile.objetivo}`;
   const [res, setRes] = useState<AlternativesResult | null>(() => cache.get(key) ?? null);
   const [loading, setLoading] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const canSearch = (product.categories ?? []).length > 0;
 
   useEffect(() => {
@@ -38,7 +39,7 @@ export default function Alternatives({ product, profile, hoy, onOpen, onCompare 
     });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, attempt]);
 
   const where = onlyStore && store ? `en ${storeName(store)}` : 'en supermercados de España';
 
@@ -55,7 +56,12 @@ export default function Alternatives({ product, profile, hoy, onOpen, onCompare 
       {!canSearch && <p className="small muted">Este producto no tiene categoría en Open Food Facts (lo has metido a mano o por foto), así que no puedo buscar productos parecidos.</p>}
       {canSearch && !navigator.onLine && !res && <p className="small muted">Sin conexión: las alternativas se buscan en internet.</p>}
       {loading && <p className="busy"><Loader2 className="spin" size={16} /> Buscando productos parecidos…</p>}
-      {res?.status === 'error' && <p className="small muted">{res.message}</p>}
+      {res?.status === 'error' && !loading && (
+        <div className="alt-error">
+          <p className="small muted">{res.message}</p>
+          <button className="btn ghost small-btn" onClick={() => setAttempt((n) => n + 1)}>Reintentar</button>
+        </div>
+      )}
       {res?.status === 'ok' && !loading && (
         res.items.length ? (
           <>

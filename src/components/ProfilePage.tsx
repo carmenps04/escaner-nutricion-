@@ -18,6 +18,18 @@ const num = (s: string) => {
 };
 const str = (v: number | undefined) => (v == null ? '' : String(v).replace('.', ','));
 
+const SECTIONS = [
+  ['macros', 'Macros'],
+  ['entreno', 'Entrenamiento semanal'],
+  ['plan', 'Plan del dietista'],
+  ['composicion', 'Composición corporal'],
+  ['gasto', 'Gasto y objetivo'],
+  ['citas', 'Evolución por citas'],
+  ['datos', 'Tus datos'],
+] as const;
+type Section = (typeof SECTIONS)[number][0];
+const SECTION_KEY = 'escaner.perfil.seccion';
+
 interface Props {
   profile: Profile;
   configured: boolean;
@@ -32,6 +44,21 @@ export default function ProfilePage({ profile, configured, onSaved, toast, pendi
   const [busy, setBusy] = useState<string | null>(null);
   const [found, setFound] = useState<string[] | null>(null);
   const file = useRef<HTMLInputElement>(null);
+  // Sección abierta: se recuerda mientras la app está abierta; un enlace #datos= abre «Tus datos».
+  const [section, setSectionState] = useState<Section>(() => {
+    if (pendingImport) return 'datos';
+    try { return (sessionStorage.getItem(SECTION_KEY) as Section) || 'macros'; } catch { return 'macros'; }
+  });
+  const setSection = (k: Section) => {
+    setSectionState(k);
+    try { sessionStorage.setItem(SECTION_KEY, k); } catch { /* sin almacenamiento */ }
+  };
+  useEffect(() => { if (pendingImport) setSection('datos'); }, [pendingImport]);
+  const subnav = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = subnav.current?.querySelector<HTMLElement>('.on');
+    el?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [section]);
   const dirty = !configured || JSON.stringify(p) !== JSON.stringify(profile);
   // Sin calorías o macros la valoración no se puede calcular (dividiría entre cero).
   const invalid = [
@@ -71,7 +98,7 @@ export default function ProfilePage({ profile, configured, onSaved, toast, pendi
 
 
   return (
-    <div className={`page ${dirty ? 'has-savebar' : ''}`}>
+    <div className={`page narrow ${dirty ? 'has-savebar' : ''}`}>
       <header className="page-head">
         <div>
           <h1>Mi perfil</h1>
@@ -79,73 +106,86 @@ export default function ProfilePage({ profile, configured, onSaved, toast, pendi
         </div>
       </header>
 
-      <section className="card">
-        <button className="btn primary wide" onClick={() => file.current?.click()} disabled={!!busy}>
-          {busy ? <Loader2 className="spin" size={18} /> : <Camera size={18} />}
-          {busy ?? 'Leer la hoja del dietista'}
-        </button>
-        <input ref={file} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) readSheet(f); e.target.value = ''; }} />
-        {found ? (
-          <p className="note">
-            {found.length ? <>He leído: {found.join(', ')}. Revisa los números y pulsa <b>Guardar</b>.</> : 'No he encontrado datos en la foto. Prueba con una captura más nítida o rellénalo a mano.'}
-          </p>
-        ) : (
-          <p className="small muted">Sirve una foto o una captura del PDF. Después revisa los números antes de guardar.</p>
-        )}
-      </section>
+      <div className="subnav" role="tablist" aria-label="Secciones del perfil" ref={subnav}>
+        {SECTIONS.map(([k, label]) => (
+          <button key={k} role="tab" aria-selected={section === k} className={section === k ? 'on' : ''} onClick={() => setSection(k)}>{label}</button>
+        ))}
+      </div>
 
-      <div className="cols">
-        <div className="col">
+      {section === 'macros' && (
+        <>
+          <section className="card">
+            <button className="btn primary wide" onClick={() => file.current?.click()} disabled={!!busy}>
+              {busy ? <Loader2 className="spin" size={18} /> : <Camera size={18} />}
+              {busy ?? 'Leer la hoja del dietista'}
+            </button>
+            <input ref={file} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) readSheet(f); e.target.value = ''; }} />
+            {found ? (
+              <p className="note">
+                {found.length ? <>He leído: {found.join(', ')}. Revisa los números y pulsa <b>Guardar</b>.</> : 'No he encontrado datos en la foto. Prueba con una captura más nítida o rellénalo a mano.'}
+              </p>
+            ) : (
+              <p className="small muted">Sirve una foto o una captura del PDF. Rellena también la composición corporal y el gasto. Revisa los números antes de guardar.</p>
+            )}
+          </section>
           <PlanCard title="Días sin entreno" icon={<Sofa size={15} />} d={p.descanso} onChange={(patch) => setDay('descanso', patch)} />
           <PlanCard title="Días de entreno" icon={<Dumbbell size={15} />} d={p.entreno} onChange={(patch) => setDay('entreno', patch)} />
-          <TrainingCard semana={p.semana ?? []} onChange={(semana) => setP((old) => ({ ...old, semana, diasEntrenoSemana: semana.length }))} />
-          <DietPlanCard />
           <p className="small muted">
-            Las raciones se leen como hidratos · proteína · grasa, a 10 g cada una (16.12.5 = 160 g de hidratos, 120 g de proteína y 50 g de grasa). Cuadra con las calorías de la hoja, pero es una suposición: confírmala con tu dietista.
+            Las raciones se leen como hidratos · proteína · grasa, a 10 g cada una (16.12.5 = 160 g de hidratos, 120 g de proteína y 50 g de grasa).
           </p>
-        </div>
+        </>
+      )}
 
-        <div className="col">
-          <section className="card">
-            <h2 className="card-title">Composición corporal</h2>
-            <label className="field">
-              <span>Fecha de la medición</span>
-              <input type="date" value={p.fecha} onChange={(e) => set('fecha', e.target.value)} />
-            </label>
-            <div className="grid-2">
-              <NumField label="Peso" unit="kg" value={p.peso} onCommit={(v) => set('peso', v)} />
-              <NumField label="Talla" unit="cm" value={p.talla} onCommit={(v) => set('talla', v)} />
-              <NumField label="Grasa" unit="%" value={p.pctGrasa} onCommit={(v) => set('pctGrasa', v)} />
-              <NumField label="Kg de grasa" unit="kg" value={p.kgGrasa} onCommit={(v) => set('kgGrasa', v)} />
-              <NumField label="Masa libre de grasa" unit="kg" value={p.mlg} onCommit={(v) => set('mlg', v)} />
-              <div className="field"><span>IMC</span><div className="readonly">{p.talla ? fmt(imc(p)) : '—'}</div></div>
-            </div>
-          </section>
+      {section === 'entreno' && (
+        <TrainingCard semana={p.semana ?? []} onChange={(semana) => setP((old) => ({ ...old, semana, diasEntrenoSemana: semana.length }))} />
+      )}
 
-          <section className="card">
-            <h2 className="card-title">Gasto y objetivo</h2>
-            <label className="field">
-              <span>Objetivo</span>
-              <select value={p.objetivo} onChange={(e) => set('objetivo', e.target.value as Objetivo)}>
-                {Object.entries(OBJETIVOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </label>
-            <div className="grid-2">
-              <NumField label="GMT + NEAT" unit="kcal" value={p.gmtNeat} onCommit={(v) => set('gmtNeat', v)} />
-              <NumField label="Gasto del entreno" unit="kcal" value={p.gastoEntreno} onCommit={(v) => set('gastoEntreno', v)} />
-              <NumField label="Déficit o superávit" unit="%" value={p.deficitPct} onCommit={(v) => set('deficitPct', v)} />
-            </div>
-          </section>
+      {section === 'plan' && <DietPlanCard />}
 
-          <CitasCard onChange={() => onSaved(syncProfileWithCitas(profile))} />
+      {section === 'composicion' && (
+        <section className="card">
+          <h2 className="card-title">Composición corporal</h2>
+          <label className="field">
+            <span>Fecha de la medición</span>
+            <input type="date" value={p.fecha} onChange={(e) => set('fecha', e.target.value)} />
+          </label>
+          <div className="grid-2">
+            <NumField label="Peso" unit="kg" value={p.peso} onCommit={(v) => set('peso', v)} />
+            <NumField label="Talla" unit="cm" value={p.talla} onCommit={(v) => set('talla', v)} />
+            <NumField label="Grasa" unit="%" value={p.pctGrasa} onCommit={(v) => set('pctGrasa', v)} />
+            <NumField label="Kg de grasa" unit="kg" value={p.kgGrasa} onCommit={(v) => set('kgGrasa', v)} />
+            <NumField label="Masa libre de grasa" unit="kg" value={p.mlg} onCommit={(v) => set('mlg', v)} />
+            <div className="field"><span>IMC</span><div className="readonly">{p.talla ? fmt(imc(p)) : '—'}</div></div>
+          </div>
+        </section>
+      )}
 
-          <DataCard toast={toast} pending={pendingImport} onPendingDone={onPendingDone} />
-        </div>
-      </div>
+      {section === 'gasto' && (
+        <section className="card">
+          <h2 className="card-title">Gasto y objetivo</h2>
+          <label className="field">
+            <span>Objetivo</span>
+            <select value={p.objetivo} onChange={(e) => set('objetivo', e.target.value as Objetivo)}>
+              {Object.entries(OBJETIVOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </label>
+          <div className="grid-2">
+            <NumField label="GMT + NEAT" unit="kcal" value={p.gmtNeat} onCommit={(v) => set('gmtNeat', v)} />
+            <NumField label="Gasto del entreno" unit="kcal" value={p.gastoEntreno} onCommit={(v) => set('gastoEntreno', v)} />
+            <NumField label="Déficit o superávit" unit="%" value={p.deficitPct} onCommit={(v) => set('deficitPct', v)} />
+          </div>
+        </section>
+      )}
+
+      {section === 'citas' && <CitasCard onChange={() => onSaved(syncProfileWithCitas(profile))} />}
+
+      {section === 'datos' && <DataCard toast={toast} pending={pendingImport} onPendingDone={onPendingDone} />}
 
       {dirty && (
         <div className="savebar">
-          <span className={invalid.length ? 'over' : ''}>{invalid.length ? `Falta ${invalid[0]}` : configured ? 'Cambios sin guardar' : 'Revisa y guarda tus datos'}</span>
+          {invalid.length && section !== 'macros'
+            ? <button className="link over savebar-msg" onClick={() => setSection('macros')}>Falta {invalid[0]}</button>
+            : <span className={invalid.length ? 'over' : ''}>{invalid.length ? `Falta ${invalid[0]}` : configured ? 'Cambios sin guardar' : 'Revisa y guarda tus datos'}</span>}
           {configured && <button className="btn ghost" onClick={() => { setP(profile); setFound(null); }}>Descartar</button>}
           <button className="btn primary" onClick={save} disabled={invalid.length > 0}>Guardar</button>
         </div>

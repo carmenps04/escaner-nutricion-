@@ -55,7 +55,9 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   if (url.hostname.endsWith('openfoodfacts.org') && url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirst(request, API, 4000));
+    // La búsqueda de alternativas tarda bastante más que un código de barras: con 4 s fallaba siempre.
+    const slow = url.pathname.startsWith('/api/v2/search');
+    event.respondWith(networkFirst(request, API, slow ? 30000 : 4000));
     return;
   }
   if (url.origin !== self.location.origin) return;

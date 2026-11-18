@@ -149,3 +149,48 @@ test('plan: objetivo de cada comida en gramos', () => {
   assert.equal(mealTarget(PLAN, 'Desayuno', true)!.titulo, 'Ingesta post-entrenamiento');
   assert.equal(mealTarget(PLAN, 'Merienda', false), null);
 });
+
+// ── Búsqueda de alternativas: reintento y mensajes ─────────────────
+import { findAlternatives } from '../src/lib/alternatives.ts';
+
+const galleta: Product = { code: '1', name: 'Galletas', brand: 'Hacendado', n: { kcal: 480, prot: 7, hc: 65, azucar: 22, grasa: 20, sat: 9, fibra: 3, sal: 0.8 }, liquid: false, nova: 4, source: 'openfoodfacts', stores: ['mercadona'], categories: ['en:snacks', 'en:biscuits', 'en:digestive-biscuits'] };
+const offItem = (code: string, sugar: number) => ({ code, product_name: 'Galleta ' + code, brands: 'Hacendado', categories_tags: galleta.categories, nova_group: 3,
+  nutriments: { 'energy-kcal_100g': 420, proteins_100g: 10, carbohydrates_100g: 60, sugars_100g: sugar, fat_100g: 14, 'saturated-fat_100g': 2, fiber_100g: 8, salt_100g: 0.5 } });
+
+async function withFetch(fake: (url: string) => Promise<Response>, fn: () => Promise<void>) {
+  const orig = globalThis.fetch;
+  globalThis.fetch = ((u: string) => fake(String(u))) as typeof fetch;
+  try { await fn(); } finally { globalThis.fetch = orig; }
+}
+
+test('alternativas: si Open Food Facts da 503, reintenta una vez', async () => {
+  let calls = 0;
+  await withFetch(async () => {
+    calls++;
+    return calls === 1 ? new Response('', { status: 503 }) : Response.json({ products: [offItem('2', 3), offItem('3', 4)] });
+  }, async () => {
+    const r = await findAlternatives(galleta, DEFAULT_PROFILE);
+    assert.equal(r.status, 'ok');
+    assert.ok(r.items.length >= 1);
+  });
+});
+
+test('alternativas: mensaje claro si sigue saturado o sin red', async () => {
+  await withFetch(async () => new Response('', { status: 503 }), async () => {
+    const r = await findAlternatives(galleta, DEFAULT_PROFILE);
+    assert.equal(r.status, 'error');
+    assert.match(r.message ?? '', /saturado/);
+  });
+  await withFetch(async () => { throw new TypeError('Failed to fetch'); }, async () => {
+    assert.match((await findAlternatives(galleta, DEFAULT_PROFILE)).message ?? '', /conectar/);
+  });
+});
+
+test('alternativas: si falla la segunda búsqueda, usa lo ya encontrado', async () => {
+  let calls = 0;
+  await withFetch(async () => (++calls === 1 ? Response.json({ products: [offItem('2', 3)] }) : new Response('', { status: 503 })), async () => {
+    const r = await findAlternatives(galleta, DEFAULT_PROFILE);
+    assert.equal(r.status, 'ok');
+    assert.equal(r.items[0]?.product.code, '2');
+  });
+});

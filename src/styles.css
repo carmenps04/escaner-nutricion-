@@ -450,3 +450,15 @@ details.how:not([open]) { gap: 0; }
 @media (max-width: 600px) { .plan-days { grid-template-columns: 1fr; } }
 @media (max-width: 380px) { .entry-vs { padding-left: 0; } }
 .plan-remove { margin-top: 12px; align-self: flex-start; }
+
+/* ───────────── Secciones del perfil ───────────── */
+.subnav { position: sticky; top: env(safe-area-inset-top); z-index: 6; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; margin: -4px -16px 0; padding: 8px 16px; background: var(--bg); scroll-padding-inline: 16px; }
+.subnav::-webkit-scrollbar { display: none; }
+.subnav button { flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 999px; min-height: 36px; padding: 0 14px; font-size: 14px; font-weight: 600; white-space: nowrap; -webkit-appearance: none; appearance: none; }
+.subnav button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.savebar-msg { text-align: left; font-weight: 600; }
+@media (min-width: 960px) {
+  .subnav { flex-wrap: wrap; overflow: visible; margin: 0; padding: 8px 0; }
+}
+.alt-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.alt-error p { margin: 0; }
