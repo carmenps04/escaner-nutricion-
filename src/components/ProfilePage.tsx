@@ -29,6 +29,13 @@ export default function ProfilePage({ profile, configured, onSaved, toast }: Pro
   const [found, setFound] = useState<string[] | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const dirty = !configured || JSON.stringify(p) !== JSON.stringify(profile);
+  // Sin calorías o macros la valoración no se puede calcular (dividiría entre cero).
+  const invalid = [
+    !(p.descanso.kcal > 0) && 'las calorías de los días sin entreno',
+    !(p.entreno.kcal > 0) && 'las calorías de los días de entreno',
+    !(p.descanso.prot > 0 && p.descanso.hc > 0 && p.descanso.grasa > 0) && 'los macros de los días sin entreno',
+    !(p.entreno.prot > 0 && p.entreno.hc > 0 && p.entreno.grasa > 0) && 'los macros de los días de entreno',
+  ].filter(Boolean) as string[];
 
   const set = <K extends keyof Profile>(k: K, v: Profile[K]) => setP((old) => ({ ...old, [k]: v }));
   const setDay = (day: 'descanso' | 'entreno', patch: Partial<DayPlan>) => setP((old) => ({ ...old, [day]: { ...old[day], ...patch } }));
@@ -145,9 +152,9 @@ export default function ProfilePage({ profile, configured, onSaved, toast }: Pro
 
       {dirty && (
         <div className="savebar">
-          <span>{configured ? 'Tienes cambios sin guardar' : 'Revisa tus datos y guárdalos'}</span>
+          <span className={invalid.length ? 'over' : ''}>{invalid.length ? `Falta ${invalid[0]}` : configured ? 'Cambios sin guardar' : 'Revisa y guarda tus datos'}</span>
           {configured && <button className="btn ghost" onClick={() => { setP(profile); setFound(null); }}>Descartar</button>}
-          <button className="btn primary" onClick={save}>Guardar</button>
+          <button className="btn primary" onClick={save} disabled={invalid.length > 0}>Guardar</button>
         </div>
       )}
     </div>

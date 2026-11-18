@@ -1,6 +1,9 @@
 import { Dumbbell } from 'lucide-react';
 import { DIAS, type TrainingDay } from '../lib/training.ts';
 
+/** Así tiene Carmen organizados sus entrenamientos: día 1 a día 4 de su rutina. */
+const SESIONES = ['Día 1', 'Día 2', 'Día 3', 'Día 4'];
+
 /** Semana de entreno: qué días, qué sesión y a qué hora. */
 export default function TrainingCard({ semana, onChange }: { semana: TrainingDay[]; onChange: (s: TrainingDay[]) => void }) {
   const byDow = new Map(semana.map((t) => [t.dow, t]));
@@ -9,7 +12,9 @@ export default function TrainingCard({ semana, onChange }: { semana: TrainingDay
     else {
       // Al activar un día se propone la hora del último día configurado, para no repetirla.
       const hora = semana[semana.length - 1]?.hora ?? '07:00';
-      onChange([...semana, { dow, hora }].sort((a, b) => a.dow - b.dow));
+      const usadas = new Set(semana.map((t) => t.sesion));
+      const sesion = SESIONES.find((x) => !usadas.has(x));
+      onChange([...semana, { dow, hora, sesion }].sort((a, b) => a.dow - b.dow));
     }
   };
   const edit = (dow: number, patch: Partial<TrainingDay>) => onChange(semana.map((t) => (t.dow === dow ? { ...t, ...patch } : t)));
@@ -29,7 +34,12 @@ export default function TrainingCard({ semana, onChange }: { semana: TrainingDay
               </button>
               {t ? (
                 <div className="week-fields">
-                  <input aria-label={`Sesión del ${d}`} value={t.sesion ?? ''} placeholder="Sesión (opcional)" onChange={(e) => edit(dow, { sesion: e.target.value })} />
+                  <select aria-label={`Sesión del ${d}`} value={t.sesion ?? ''} onChange={(e) => edit(dow, { sesion: e.target.value || undefined })}>
+                    <option value="">Sin indicar</option>
+                    {SESIONES.map((x) => <option key={x} value={x}>{x}</option>)}
+                    {/* Si había un nombre antiguo (p. ej. «Empuje»), se conserva como opción. */}
+                    {t.sesion && !SESIONES.includes(t.sesion) && <option value={t.sesion}>{t.sesion}</option>}
+                  </select>
                   <input aria-label={`Hora del ${d}`} type="time" value={t.hora ?? ''} onChange={(e) => edit(dow, { hora: e.target.value })} />
                 </div>
               ) : (
