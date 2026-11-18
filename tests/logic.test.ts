@@ -12,25 +12,25 @@ import type { Product } from '../src/lib/types.ts';
 test('hoja del dietista (texto real del OCR)', () => {
   const txt = readFileSync(new URL('./fixtures/hoja-dietista-ocr.txt', import.meta.url), 'utf8');
   const { data } = parseDietSheet(txt);
-  assert.equal(data.fecha, '2026-10-12');
-  assert.equal(data.peso, 78.4);
-  assert.equal(data.talla, 172);
-  assert.equal(data.pctGrasa, 33.5);
-  assert.equal(data.kgGrasa, 26.3);
-  assert.equal(data.mlg, 52.1);
-  assert.equal(data.gmtNeat, 1800);
+  assert.equal(data.fecha, '2026-10-01');
+  assert.equal(data.peso, 70);
+  assert.equal(data.talla, 165);
+  assert.equal(data.pctGrasa, 30);
+  assert.equal(data.kgGrasa, 21);
+  assert.equal(data.mlg, 49);
+  assert.equal(data.gmtNeat, 1850);
   assert.equal(data.gastoEntreno, 350);
-  assert.equal(data.protGKg, 1.8);
+  assert.equal(data.protGKg, 1.7);
   assert.equal(data.deficitPct, 20);
   assert.equal(data.objetivo, 'deficit');
-  assert.deepEqual(data.descanso, { kcal: 1440, raciones: '15.11.4', hc: 150, prot: 110, grasa: 40 });
-  assert.deepEqual(data.entreno, { kcal: 1720, raciones: '18.13.5', hc: 180, prot: 130, grasa: 50 });
+  assert.deepEqual(data.descanso, { kcal: 1500, raciones: '15.12.4', hc: 150, prot: 120, grasa: 40 });
+  assert.deepEqual(data.entreno, { kcal: 1800, raciones: '18.14.5', hc: 180, prot: 140, grasa: 50 });
 });
 
 test('talla deducida del IMC si el OCR no la lee', () => {
-  const { data } = parseDietSheet('PESO 78,4 Kg IMC 26,5Kg/m? Kg de Grasa 26,3 Kg');
-  assert.equal(data.talla, 172);
-  assert.equal(data.mlg, 52.1);
+  const { data } = parseDietSheet('PESO 70,0 Kg IMC 25,7Kg/m? Kg de Grasa 21,0 Kg');
+  assert.equal(data.talla, 165);
+  assert.equal(data.mlg, 49);
 });
 
 test('raciones a gramos (1 ración = 10 g)', () => {

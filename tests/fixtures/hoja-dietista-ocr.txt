@@ -12,7 +12,7 @@ N Planificación nutricional y deportivo.
 
 @dietista Ny
 
-FECHA DE ANTROPOMETRÍA: 12 DE OCTUBRE DE 2026
+FECHA DE ANTROPOMETRÍA: 1 DE OCTUBRE DE 2026
 
 PACIENTE
 
@@ -20,43 +20,43 @@ PACIENTE EJEMPLO (30 AÑOS)
 
 PESO
 
-78,4 Kg
+70,0 Kg
 
 IMC
 
-26,5Kg/m?
+25,7Kg/m?
 
 TALLA
 
-172 cm
+165 cm
 
 %Grasa
 
-33,5%
+30,0%
 
 Peso libre de grasa
 
-52,1 Kg
+49,0 Kg
 
 (MLG)
 
 Kg de Grasa
 
-26,3 Kg
+21,0 Kg
 
-1440 Kcal
+1500 Kcal
 
 GET de tratamiento = -20%
 
 GMT + NEAT
 
-1650Kcal +150= 1800 kcal
+1700Kcal +150= 1850 kcal
 
-(1,88/Kg)
+(1,7 g/Kg)
 
 GMT
 
-(15.11.4)
+(15.12.4)
 
 Días de no entrenamiento
 
@@ -64,7 +64,7 @@ Gasto energético
 
 GET de tratamiento= -20%
 
-1720 kcal
+1800 kcal
 
 asociado a
 
@@ -72,13 +72,13 @@ asociado a
 
 Días de entrenamiento de
 
-(1,8 g/Kg)
+(1,9 g/Kg)
 
 entrenamiento de
 
 gimnasio
 
-(18.13.5)
+(18.14.5)
 
 gimnasio
 
