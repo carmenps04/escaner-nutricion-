@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Dumbbell, Link2, Loader2, Sofa } from 'lucide-react';
+import { Camera, Dumbbell, Loader2, Sofa } from 'lucide-react';
 import {
   OBJETIVOS, imc, macroKcal, racionesToGrams, saveProfile, syncProfileWithCitas,
   type DayPlan, type Objetivo, type Profile,
@@ -9,6 +9,7 @@ import { readImage, statusText } from '../lib/ocr.ts';
 import { fmt } from '../lib/evaluate.ts';
 import CitasCard from './CitasCard.tsx';
 import TrainingCard from './TrainingCard.tsx';
+import DataCard from './DataCard.tsx';
 
 const num = (s: string) => {
   const t = s.replace(',', '.').trim();
@@ -21,9 +22,11 @@ interface Props {
   configured: boolean;
   onSaved: (p: Profile) => void;
   toast: (m: string) => void;
+  pendingImport?: string | null;
+  onPendingDone: () => void;
 }
 
-export default function ProfilePage({ profile, configured, onSaved, toast }: Props) {
+export default function ProfilePage({ profile, configured, onSaved, toast, pendingImport, onPendingDone }: Props) {
   const [p, setP] = useState<Profile>(profile);
   const [busy, setBusy] = useState<string | null>(null);
   const [found, setFound] = useState<string[] | null>(null);
@@ -65,16 +68,6 @@ export default function ProfilePage({ profile, configured, onSaved, toast }: Pro
     toast('Perfil guardado');
   };
 
-  const shareLink = async () => {
-    const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(p)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    const url = `${location.origin}${location.pathname}#perfil=${b64}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      toast('Enlace copiado. Ábrelo en el otro dispositivo para cargar tu perfil.');
-    } catch {
-      prompt('Copia este enlace', url);
-    }
-  };
 
   return (
     <div className={`page ${dirty ? 'has-savebar' : ''}`}>
@@ -144,9 +137,7 @@ export default function ProfilePage({ profile, configured, onSaved, toast }: Pro
 
           <CitasCard onChange={() => onSaved(syncProfileWithCitas(profile))} />
 
-          {configured && (
-            <button className="link" onClick={shareLink}><Link2 size={14} style={{ verticalAlign: '-2px' }} /> Copiar enlace para pasar el perfil a otro dispositivo</button>
-          )}
+          <DataCard toast={toast} pending={pendingImport} onPendingDone={onPendingDone} />
         </div>
       </div>
 

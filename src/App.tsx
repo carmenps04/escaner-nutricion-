@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Barcode, Camera, History as HistoryIcon, Keyboard, Loader2, NotebookPen, PenLine, ScanLine, Trash2, User, WifiOff, Image as ImageIcon } from 'lucide-react';
+import { Barcode, Camera, History as HistoryIcon, Keyboard, Loader2, NotebookPen, PenLine, ScanLine, Trash2, User, WifiOff, X, Image as ImageIcon } from 'lucide-react';
 import Scanner, { decodeBarcodePhoto } from './components/Scanner.tsx';
 import ProductForm from './components/ProductForm.tsx';
 import ResultView from './components/ResultView.tsx';
@@ -12,6 +12,7 @@ import { readImage, statusText } from './lib/ocr.ts';
 import { addToHistory, getCustom, loadHistory, removeFromHistory, saveCustom } from './lib/storage.ts';
 import { evaluate, VERDICT_TEXT } from './lib/evaluate.ts';
 import { today } from './lib/training.ts';
+import { askPersistence, isIOS, isStandalone } from './lib/backup.ts';
 import TodayChip from './components/TodayChip.tsx';
 import DiaryPage from './components/DiaryPage.tsx';
 import CompareView from './components/CompareView.tsx';
@@ -40,6 +41,8 @@ export default function App() {
   const [histVersion, setHistVersion] = useState(0);
   const [todayVersion, setTodayVersion] = useState(0);
   const [online, setOnline] = useState(() => navigator.onLine);
+  const [pendingImport, setPendingImport] = useState<string | null>(null);
+  const [installHint, setInstallHint] = useState(() => isIOS() && !isStandalone() && localStorage.getItem('escaner.aviso-inicio') == null);
   const [histSort, setHistSort] = useState<'recent' | 'score'>(() => (localStorage.getItem('escaner.orden') === 'score' ? 'score' : 'recent'));
   useEffect(() => {
     try { localStorage.setItem('escaner.orden', histSort); } catch { /* ignorar */ }
@@ -58,6 +61,14 @@ export default function App() {
   // solo cambia el «#». Por eso también se escucha ese cambio.
   useEffect(() => {
     const onHash = () => {
+      // «#datos=…»: todos los datos; se piden confirmar en el perfil antes de sustituir nada.
+      const m = location.hash.match(/datos=[A-Za-z0-9_\-+/=]+/);
+      if (m) {
+        setPendingImport(m[0]);
+        history.replaceState(null, '', location.pathname + location.search);
+        setView({ name: 'profile' });
+        return;
+      }
       if (importFromHash()) {
         setProfile(loadProfile());
         setConfigured(true);
@@ -65,6 +76,7 @@ export default function App() {
         toast('Perfil cargado');
       }
     };
+    onHash();
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, [toast]);
@@ -76,6 +88,8 @@ export default function App() {
     window.addEventListener('offline', off);
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
+
+  useEffect(() => askPersistence(), []);
 
   // Cada pantalla empieza arriba del todo.
   useEffect(() => {
@@ -205,6 +219,14 @@ export default function App() {
                 <p>Escanea un producto y te digo si encaja en tu plan.</p>
               </div>
             </header>
+            {installHint && (
+              <div className="install">
+                <span>
+                  <b>Añade la app a la pantalla de inicio</b> (Compartir → «Añadir a pantalla de inicio») para que Safari no borre tus datos. Antes, en Perfil, pulsa «Copiar mis datos» y pégalos al abrirla desde el icono.
+                </span>
+                <button className="icon-btn" aria-label="Cerrar aviso" onClick={() => { localStorage.setItem('escaner.aviso-inicio', '1'); setInstallHint(false); }}><X size={16} /></button>
+              </div>
+            )}
             {configured && <TodayChip hoy={hoy} onChange={refreshToday} />}
             {!configured && (
               <button className="setup" onClick={() => go('profile')}>
@@ -301,6 +323,8 @@ export default function App() {
             profile={profile}
             configured={configured}
             toast={toast}
+            pendingImport={pendingImport}
+            onPendingDone={() => setPendingImport(null)}
             onSaved={(p) => { setProfile(p); setConfigured(true); }}
           />
         )}

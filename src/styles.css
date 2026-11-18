@@ -403,3 +403,14 @@ details.how:not([open]) { gap: 0; }
 .how-bar span { display: block; height: 100%; border-radius: inherit; }
 .how-bar .g { background: var(--good-dot); } .how-bar .m { background: var(--mid-dot); } .how-bar .b { background: var(--bad-dot); }
 .week-fields select { padding-right: 30px; background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2369705f' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center; }
+
+/* Tus datos */
+.data-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.data-actions .btn { min-width: 0; padding: 0 10px; font-size: 14px; gap: 6px; }
+.field textarea { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 16px; font-family: inherit; resize: vertical; background: var(--surface); outline: none; }
+.field textarea:focus { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-soft); }
+.data-load { align-self: flex-start; }
+.data-confirm { background: var(--accent-soft); color: var(--accent-ink); }
+.data-file { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-top: 4px; border-top: 1px solid var(--line); padding-top: 12px; }
+.install { display: flex; gap: 8px; align-items: flex-start; background: var(--accent-soft); color: var(--accent-ink); border-radius: var(--radius-sm); padding: 10px 6px 10px 14px; font-size: 14px; line-height: 1.4; }
+.install .icon-btn { width: 32px; height: 32px; color: var(--accent-ink); }

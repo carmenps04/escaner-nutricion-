@@ -184,7 +184,9 @@ export function portion(p: Product, plan: DayPlan, verdict: Verdict, kind: Evalu
     return { grams: null, units: null, limitedBy: 'faltan datos', kcal: null, pctDayKcal: null, prot: null, hc: null, grasa: null };
   }
   const best = caps.reduce((a, b) => (b.g < a.g ? b : a));
-  if (best.g > 600) {
+  // «Sin límite» solo para verduras y alimentos de muy pocas calorías (≤ 30 kcal por 100 g, no
+  // bebidas). Con lo demás se da la cifra, aunque sea alta (p. ej. leche desnatada: hasta 950 ml).
+  if (best.g > 600 && (n.kcal ?? 0) <= 30 && !isDrinkP(p)) {
     return { grams: null, units: null, limitedBy: 'alimento poco calórico: no hay un límite práctico por toma', kcal: null, pctDayKcal: null, prot: null, hc: null, grasa: null };
   }
   let grams = best.g;
@@ -194,7 +196,7 @@ export function portion(p: Product, plan: DayPlan, verdict: Verdict, kind: Evalu
     if (units >= 1) grams = units * p.unitWeight;
     else units = 0;
   } else {
-    grams = grams >= 20 ? Math.floor(grams / 5) * 5 : Math.floor(grams);
+    grams = grams >= 200 ? Math.floor(grams / 50) * 50 : grams >= 20 ? Math.floor(grams / 5) * 5 : Math.floor(grams);
   }
   const f = grams / 100;
   const kcal = n.kcal != null ? n.kcal * f : null;

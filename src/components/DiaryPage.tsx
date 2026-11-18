@@ -130,8 +130,17 @@ function EntryRow({ e, day, onOpen, onChange }: { e: DiaryEntry; day: string; on
   const [qty, setQty] = useState(String(e.units ?? e.grams ?? '').replace('.', ','));
   const unitOf = (p?: Product) => (p?.liquid ? 'ml' : 'g');
   const single = !e.items && e.product && e.grams != null;
+  const manual = !e.items && !e.product;
   const qtyText = e.units != null ? `${fmt(e.units, 1)} ${e.units === 1 ? e.unitName : plural(e.unitName ?? 'unidad')}` : e.grams != null ? `${fmt(e.grams, 0)} ${unitOf(e.product)}` : null;
   const meta = [qtyText, `${fmt(e.kcal, 0)} kcal`, `${fmt(e.prot, 0)} g prot.`, `${fmt(e.hc, 0)} g HC`, `${fmt(e.grasa, 0)} g grasa`].filter(Boolean).join(' · ');
+
+  if (editing && manual) {
+    return (
+      <div className="entry">
+        <ManualEntry initial={e} onCancel={() => setEditing(false)} onAdd={(m) => { updateEntry(e.id, m, day); setEditing(false); onChange(); }} />
+      </div>
+    );
+  }
 
   if (editing && e.items) {
     return (
@@ -154,7 +163,7 @@ function EntryRow({ e, day, onOpen, onChange }: { e: DiaryEntry; day: string; on
     <div className="entry">
       <div className="entry-row">
         <span className="entry-time">{e.time}</span>
-        <button className="entry-main" onClick={() => (e.items || single ? setEditing(!editing) : undefined)} aria-expanded={editing}>
+        <button className="entry-main" onClick={() => setEditing(!editing)} aria-expanded={editing}>
           <span className="entry-title">{e.name}</span>
           <span className="entry-meta">{meta}</span>
         </button>
@@ -192,8 +201,9 @@ function EntryRow({ e, day, onOpen, onChange }: { e: DiaryEntry; day: string; on
   );
 }
 
-function ManualEntry({ onAdd, onCancel }: { onAdd: (e: Omit<DiaryEntry, 'id' | 'time'>) => void; onCancel: () => void }) {
-  const [v, setV] = useState({ name: '', kcal: '', prot: '', hc: '', grasa: '' });
+function ManualEntry({ onAdd, onCancel, initial }: { onAdd: (e: Omit<DiaryEntry, 'id' | 'time'>) => void; onCancel: () => void; initial?: DiaryEntry }) {
+  const str = (x?: number) => (x == null ? '' : String(Math.round(x * 10) / 10).replace('.', ','));
+  const [v, setV] = useState({ name: initial?.name ?? '', kcal: str(initial?.kcal), prot: str(initial?.prot), hc: str(initial?.hc), grasa: str(initial?.grasa) });
   const set = (k: keyof typeof v) => (ev: React.ChangeEvent<HTMLInputElement>) => setV({ ...v, [k]: ev.target.value });
   const ok = v.name.trim() && num(v.kcal) > 0;
   return (
@@ -207,7 +217,7 @@ function ManualEntry({ onAdd, onCancel }: { onAdd: (e: Omit<DiaryEntry, 'id' | '
       </div>
       <div className="cita-actions">
         <button className="btn ghost small-btn" onClick={onCancel}>Cancelar</button>
-        <button className="btn primary small-btn" disabled={!ok} onClick={() => onAdd({ name: v.name.trim(), grams: null, kcal: num(v.kcal), prot: num(v.prot), hc: num(v.hc), grasa: num(v.grasa) })}>Añadir</button>
+        <button className="btn primary small-btn" disabled={!ok} onClick={() => onAdd({ name: v.name.trim(), grams: null, kcal: num(v.kcal), prot: num(v.prot), hc: num(v.hc), grasa: num(v.grasa) })}>{initial ? 'Guardar' : 'Añadir'}</button>
       </div>
     </div>
   );

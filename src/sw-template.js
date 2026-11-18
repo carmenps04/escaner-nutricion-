@@ -55,7 +55,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   if (url.hostname.endsWith('openfoodfacts.org') && url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirst(request, API, 8000));
+    event.respondWith(networkFirst(request, API, 4000));
     return;
   }
   if (url.origin !== self.location.origin) return;
