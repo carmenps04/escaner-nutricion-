@@ -10,6 +10,7 @@ import { fmt } from '../lib/evaluate.ts';
 import CitasCard from './CitasCard.tsx';
 import TrainingCard from './TrainingCard.tsx';
 import DataCard from './DataCard.tsx';
+import DietPlanCard from './DietPlanCard.tsx';
 
 const num = (s: string) => {
   const t = s.replace(',', '.').trim();
@@ -98,6 +99,7 @@ export default function ProfilePage({ profile, configured, onSaved, toast, pendi
           <PlanCard title="Días sin entreno" icon={<Sofa size={15} />} d={p.descanso} onChange={(patch) => setDay('descanso', patch)} />
           <PlanCard title="Días de entreno" icon={<Dumbbell size={15} />} d={p.entreno} onChange={(patch) => setDay('entreno', patch)} />
           <TrainingCard semana={p.semana ?? []} onChange={(semana) => setP((old) => ({ ...old, semana, diasEntrenoSemana: semana.length }))} />
+          <DietPlanCard />
           <p className="small muted">
             Las raciones se leen como hidratos · proteína · grasa, a 10 g cada una (16.12.5 = 160 g de hidratos, 120 g de proteína y 50 g de grasa). Cuadra con las calorías de la hoja, pero es una suposición: confírmala con tu dietista.
           </p>

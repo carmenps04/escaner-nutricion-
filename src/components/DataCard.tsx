@@ -86,8 +86,8 @@ export default function DataCard({ toast, pending, onPendingDone }: Props) {
       {candidate && s && (
         <div className="cita-confirm data-confirm">
           <span>
-            Se cargarán: {[s.perfil && 'tu perfil', s.productos && `${s.productos} ${s.productos === 1 ? 'producto' : 'productos'}`, s.dias && `${s.dias} ${s.dias === 1 ? 'día' : 'días'} de diario`, s.citas && `${s.citas} ${s.citas === 1 ? 'cita' : 'citas'}`].filter(Boolean).join(', ')}.
-            Sustituye lo que hay ahora en este dispositivo.
+            Se cargarán: {[s.perfil && 'tu perfil', s.productos && `${s.productos} ${s.productos === 1 ? 'producto' : 'productos'}`, s.dias && `${s.dias} ${s.dias === 1 ? 'día' : 'días'} de diario`, s.citas && `${s.citas} ${s.citas === 1 ? 'cita' : 'citas'}`, s.plan && 'el plan del dietista'].filter(Boolean).join(', ')}.
+            Sustituye eso mismo en este dispositivo; lo demás no se toca.
           </span>
           <button className="btn ghost small-btn" onClick={() => { setCandidate(null); setText(''); }}>Cancelar</button>
           <button className="btn primary small-btn" onClick={confirm}>Cargar datos</button>

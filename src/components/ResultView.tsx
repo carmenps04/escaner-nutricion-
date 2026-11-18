@@ -7,6 +7,7 @@ import { timingAdvice, type Today } from '../lib/training.ts';
 import TodayChip from './TodayChip.tsx';
 import Alternatives from './Alternatives.tsx';
 import { gramsLeft, loadDay, remaining, totals } from '../lib/diary.ts';
+import { fruitPortion, fruitRaciones, loadPlan, planPortion, vegRule } from '../lib/plan.ts';
 
 interface Props {
   product: Product;
@@ -35,7 +36,23 @@ export default function ResultView({ product, profile, configured, hoy, onTodayC
   const e = useMemo(() => evaluate(product, profile), [product, profile]);
   const u = product.liquid ? 'ml' : 'g';
   const Icon = e.verdict === 'buena' ? CheckCircle2 : e.verdict === 'regular' ? MinusCircle : XCircle;
-  const todayP = hoy.entreno ? e.entreno : e.descanso;
+  // La pauta del dietista (si está cargada) manda sobre el cálculo de la app.
+  const plan = useMemo(() => loadPlan(), []);
+  const pe = useMemo(() => planPortion(plan, product, e.entreno, profile.entreno.kcal), [plan, product, e, profile]);
+  const pd = useMemo(() => planPortion(plan, product, e.descanso, profile.descanso.kcal), [plan, product, e, profile]);
+  const todayP = hoy.entreno ? pe.portion : pd.portion;
+  const planNote = useMemo(() => {
+    const rule = vegRule(plan, product);
+    if (plan && rule === 'limitada') return `Tu dietista limita esta verdura a ${plan.verdura.limite} g por comida.`;
+    if (rule === 'libre') return 'Para tu dietista es verdura libre: puedes tomar la cantidad que quieras.';
+    const fr = fruitPortion(plan, product);
+    if (fr == null) return null;
+    const base = `En tu plan, «1 fruta» es 1 ración: ${fr} g (10 g de hidratos).`;
+    if (todayP.grams == null) return base;
+    const r = fruitRaciones(fr, todayP.grams);
+    const more = r > 3 ? ' Tus comidas llevan de 1 a 3 raciones de fruta.' : '';
+    return `${base} La cantidad de arriba equivale a ${fmt(r, 1)} ${r === 1 ? 'ración' : 'raciones'}.${more}`;
+  }, [plan, product, todayP]);
   // Lo que ya llevas hoy en el diario: si queda poco, la cantidad máxima baja.
   const diaryNote = useMemo(() => {
     const entries = loadDay();
@@ -59,8 +76,8 @@ export default function ResultView({ product, profile, configured, hoy, onTodayC
   // A un producto «buena opción» no se le pide esperar a un día de entreno.
   const advice = e.kind !== 'general' || (e.verdict === 'buena' && !hoy.entreno && e.macroKind === 'hc') ? null : timingAdvice(e.macroKind, hoy);
   const boxes = [
-    <PortionBox key="e" title="Con entreno" icon={<Dumbbell size={16} />} p={e.entreno} product={product} isToday={hoy.entreno} />,
-    <PortionBox key="d" title="Sin entreno" icon={<Sofa size={16} />} p={e.descanso} product={product} isToday={!hoy.entreno} />,
+    <PortionBox key="e" title="Con entreno" icon={<Dumbbell size={16} />} p={pe.portion} label={pe.label} product={product} isToday={hoy.entreno} />,
+    <PortionBox key="d" title="Sin entreno" icon={<Sofa size={16} />} p={pd.portion} label={pd.label} product={product} isToday={!hoy.entreno} />,
   ];
 
   return (
@@ -103,7 +120,8 @@ export default function ResultView({ product, profile, configured, hoy, onTodayC
           <section className="card">
             <h2 className="card-title">Cuánto como máximo por toma</h2>
             <div className="portions">{hoy.entreno ? boxes : [boxes[1], boxes[0]]}</div>
-            {ref != null && <p className="small muted">El límite lo marca {todayP.limitedBy}.</p>}
+            {ref != null && <p className="small muted">Lo que marca el límite: {todayP.limitedBy}.</p>}
+            {planNote && <p className="note plan-note"><b>Pauta de tu dietista.</b> {planNote}</p>}
             {diaryNote && <p className={`note ${diaryNote.tone === 'ok' ? '' : 'warn-note'}`}>{diaryNote.text}</p>}
             <div className="freq-row">
               <Clock size={18} />
@@ -190,9 +208,9 @@ export default function ResultView({ product, profile, configured, hoy, onTodayC
   );
 }
 
-function PortionBox({ title, icon, p, product, isToday }: { title: string; icon: React.ReactNode; p: Portion; product: Product; isToday: boolean }) {
+function PortionBox({ title, icon, p, label, product, isToday }: { title: string; icon: React.ReactNode; p: Portion; label?: string; product: Product; isToday: boolean }) {
   // «3 galletas» en grande y los gramos y calorías debajo, para que no se parta en dos líneas.
-  const text = portionText(p, product);
+  const text = label ?? portionText(p, product);
   const m = text.match(/^(.*?) \((.*)\)$/);
   const main = m ? m[1] : text;
   const extra = [m?.[2], p.kcal != null ? `${fmt(p.kcal, 0)} kcal` : null, p.pctDayKcal != null ? `${fmt(p.pctDayKcal, 0)} % del día` : null].filter(Boolean).join(' · ');

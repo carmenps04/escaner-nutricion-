@@ -414,3 +414,39 @@ details.how:not([open]) { gap: 0; }
 .data-confirm { background: var(--accent-soft); color: var(--accent-ink); }
 .data-file { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-top: 4px; border-top: 1px solid var(--line); padding-top: 12px; }
 .new-food { display: flex; flex-direction: column; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+
+/* ───────────── Plan del dietista ───────────── */
+.plan-meal { background: var(--accent-soft); color: var(--accent-ink); border-radius: var(--radius-sm); padding: 9px 12px; font-size: 13px; line-height: 1.4; }
+.plan-meal summary { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; align-items: start; cursor: pointer; list-style: none; }
+.plan-meal summary::-webkit-details-marker { display: none; }
+.plan-meal summary::after { content: 'Ver opciones'; font-weight: 700; font-size: 12px; white-space: nowrap; text-decoration: underline; }
+.plan-meal[open] summary::after { content: 'Ocultar'; }
+.plan-meal summary svg { margin-top: 1px; }
+.plan-meal > p { margin: 8px 0 0; }
+.plan-group { margin-top: 8px; }
+.plan-group-name { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.plan-group ul { margin: 3px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.plan-tag { color: var(--accent-ink); font-weight: 600; }
+.meal-vs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 4px; }
+.vs { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; background: var(--surface-2); border-radius: 8px; padding: 5px 8px; min-width: 0; }
+.meal-total .vs { font-size: 13px; }
+.vs small { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+.vs b { color: var(--text); }
+.vs.ok { background: var(--good); color: var(--good-ink); }
+.vs.ok b { color: var(--good-ink); }
+.vs.high { background: var(--mid); color: var(--mid-ink); }
+.vs.high b { color: var(--mid-ink); }
+.entry-vs { padding-left: 52px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.entry-vs-title { font-size: 12px; color: var(--muted); margin-right: 2px; }
+.entry-vs .vs { flex-direction: row; gap: 4px; align-items: baseline; padding: 2px 7px; font-size: 12px; }
+.entry-vs .vs small { font-size: 10px; }
+.plan-card dl { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: 14px; }
+.plan-card dt { color: var(--muted); }
+.plan-card dd { margin: 0; font-variant-numeric: tabular-nums; min-width: 2.6em; }
+.plan-card dt { overflow-wrap: anywhere; }
+.plan-card h3 { font-size: 13px; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.plan-card ul { margin: 0; padding-left: 18px; font-size: 14px; display: flex; flex-direction: column; gap: 3px; }
+.plan-days { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 600px) { .plan-days { grid-template-columns: 1fr; } }
+@media (max-width: 380px) { .entry-vs { padding-left: 0; } }
+.plan-remove { margin-top: 12px; align-self: flex-start; }

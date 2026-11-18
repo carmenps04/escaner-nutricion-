@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Dumbbell, PenLine, Plus, Sofa, Trash2 } from 'lucide-react';
 import MealBuilder from './MealBuilder.tsx';
 import type { Profile } from '../lib/profile.ts';
@@ -6,6 +6,8 @@ import type { Product } from '../lib/types.ts';
 import { dowOf, type Today } from '../lib/training.ts';
 import { addEntry, dayKey, itemGrams, loadDay, remaining, removeEntry, totals, updateEntry, forGrams, type DiaryEntry } from '../lib/diary.ts';
 import { fmt, plural } from '../lib/evaluate.ts';
+import { loadPlan, mealTarget } from '../lib/plan.ts';
+import { VsPlan } from './MealBuilder.tsx';
 
 const num = (s: string) => {
   const t = s.replace(',', '.').trim();
@@ -86,12 +88,12 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
           </div>
         )}
         {adding === 'meal' && (
-          <MealBuilder onCancel={() => setAdding(null)} onSave={(e) => { addEntry(e, key); setAdding(null); refresh(); toast('Comida añadida al diario'); }} />
+          <MealBuilder entreno={entreno} onCancel={() => setAdding(null)} onSave={(e) => { addEntry(e, key); setAdding(null); refresh(); toast('Comida añadida al diario'); }} />
         )}
         {adding === 'manual' && <ManualEntry onCancel={() => setAdding(null)} onAdd={(e) => { addEntry(e, key); setAdding(null); refresh(); toast('Añadido al diario'); }} />}
         {entries.length ? (
           <div className="entries">
-            {entries.map((e) => <EntryRow key={e.id} e={e} day={key} onOpen={onOpen} onChange={refresh} />)}
+            {entries.map((e) => <EntryRow key={e.id} e={e} day={key} entreno={entreno} onOpen={onOpen} onChange={refresh} />)}
           </div>
         ) : (
           !adding && <p className="empty">Aún no has apuntado nada {isToday ? 'hoy' : 'este día'}.</p>
@@ -125,7 +127,8 @@ function Macro({ label, value, max, goal }: { label: string; value: number; max:
   );
 }
 
-function EntryRow({ e, day, onOpen, onChange }: { e: DiaryEntry; day: string; onOpen: (p: Product) => void; onChange: () => void }) {
+function EntryRow({ e, day, entreno, onOpen, onChange }: { e: DiaryEntry; day: string; entreno: boolean; onOpen: (p: Product) => void; onChange: () => void }) {
+  const target = useMemo(() => mealTarget(loadPlan(), e.name, entreno), [e.name, entreno]);
   const [editing, setEditing] = useState(false);
   const [qty, setQty] = useState(String(e.units ?? e.grams ?? '').replace('.', ','));
   const unitOf = (p?: Product) => (p?.liquid ? 'ml' : 'g');
@@ -145,7 +148,7 @@ function EntryRow({ e, day, onOpen, onChange }: { e: DiaryEntry; day: string; on
   if (editing && e.items) {
     return (
       <div className="entry">
-        <MealBuilder initial={e} onCancel={() => setEditing(false)} onSave={(m) => { updateEntry(e.id, m, day); setEditing(false); onChange(); }} />
+        <MealBuilder initial={e} entreno={entreno} onCancel={() => setEditing(false)} onSave={(m) => { updateEntry(e.id, m, day); setEditing(false); onChange(); }} />
       </div>
     );
   }
@@ -184,6 +187,14 @@ function EntryRow({ e, day, onOpen, onChange }: { e: DiaryEntry; day: string; on
             );
           })}
         </ul>
+      )}
+      {target && (
+        <div className="entry-vs">
+          <span className="entry-vs-title">Plan: {target.raciones}</span>
+          <VsPlan label="HC" value={e.hc} goal={target.hc} />
+          <VsPlan label="Prot." value={e.prot} goal={target.prot} />
+          <VsPlan label="Grasa" value={e.grasa} goal={target.grasa} />
+        </div>
       )}
       {editing && single && (
         <div className="entry-edit">

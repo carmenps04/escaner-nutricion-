@@ -95,3 +95,57 @@ test('comida con alimentos naturales: batata y pepino', async () => {
   const e = evaluate(batata, P);
   assert.equal(e.verdict, 'buena');
 });
+
+// ── Plan del dietista ─────────────────────────────────────────────
+import { fruitPortion, fruitRaciones, mealTarget, planPortion, vegRule, type DietPlan } from '../src/lib/plan.ts';
+
+const PLAN: DietPlan = {
+  fecha: '2026-01-01',
+  comidas: {
+    descanso: { comida: { titulo: 'Comida', raciones: '6.5.2', grupos: [] } },
+    entreno: { desayuno: { titulo: 'Ingesta post-entrenamiento', raciones: '4.3.1', grupos: [] } },
+  },
+  verdura: { limite: 200, limitadas: ['tomate', 'salsa de tomate', 'cebolla', 'maiz'], libres: ['pepino', 'calabacin', 'col'], texto: '' },
+  fruta: [{ gramos: 15, frutas: ['pasas'] }, { gramos: 100, frutas: ['manzana', 'uva', 'fresa'] }, { gramos: 50, frutas: ['platano'] }],
+  notas: [],
+};
+const prod = (name: string, extra: Partial<Product> = {}): Product => ({ name, n: { kcal: 20, prot: 1, hc: 3, azucar: 2, grasa: 0.2, sat: 0, fibra: 1, sal: 0 }, liquid: false, source: 'openfoodfacts', ...extra });
+
+test('plan: verdura limitada o libre por nombre, sin falsos positivos', () => {
+  assert.equal(vegRule(PLAN, prod('Tomate frito')), 'limitada');
+  assert.equal(vegRule(PLAN, prod('Tomates cherry')), 'limitada');
+  assert.equal(vegRule(PLAN, prod('Pepino', { source: 'tabla' })), 'libre');
+  assert.equal(vegRule(PLAN, prod('Cola Cao')), null);
+  assert.equal(vegRule(PLAN, prod('Coliflor')), null);
+  assert.equal(vegRule(PLAN, prod('Tortitas de maíz', { categories: ['en:corn-cakes'] })), null);
+  assert.equal(vegRule(PLAN, prod('Gazpacho con tomate')), null);
+  assert.equal(vegRule(null, prod('Tomate')), null);
+});
+
+test('plan: ración de fruta según la tabla del dietista', () => {
+  assert.equal(fruitPortion(PLAN, prod('Plátano de Canarias', { source: 'tabla' })), 50);
+  assert.equal(fruitPortion(PLAN, prod('Uvas pasas', { categories: ['en:dried-fruits'] })), 15);
+  assert.equal(fruitPortion(PLAN, prod('Yogur de fresa', { categories: ['en:fruit-yogurts'] })), null);
+  assert.equal(fruitPortion(PLAN, prod('Perlas de chocolate')), null);
+  assert.equal(fruitRaciones(100, 260), 2.5);
+});
+
+test('plan: tope de 200 g para verdura limitada; libre sin tope', () => {
+  const base = { grams: 450, units: null, limitedBy: 'x', kcal: 90, pctDayKcal: 6, prot: 4, hc: 13, grasa: 1 };
+  const lim = planPortion(PLAN, prod('Tomate'), base, 1554);
+  assert.equal(lim.portion.grams, 200);
+  assert.equal(Math.round(lim.portion.kcal!), 40);
+  assert.match(lim.portion.limitedBy, /dietista/);
+  // Si la app ya da menos, se queda lo de la app.
+  assert.equal(planPortion(PLAN, prod('Tomate'), { ...base, grams: 120 }, 1554).portion.grams, 120);
+  const libre = planPortion(PLAN, prod('Calabacín'), base, 1554);
+  assert.equal(libre.portion.grams, null);
+  assert.equal(libre.label, 'Cantidad libre');
+});
+
+test('plan: objetivo de cada comida en gramos', () => {
+  const t = mealTarget(PLAN, 'Almuerzo', false)!;
+  assert.deepEqual([t.hc, t.prot, t.grasa], [60, 50, 20]);
+  assert.equal(mealTarget(PLAN, 'Desayuno', true)!.titulo, 'Ingesta post-entrenamiento');
+  assert.equal(mealTarget(PLAN, 'Merienda', false), null);
+});

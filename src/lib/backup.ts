@@ -8,6 +8,7 @@ const KEYS = [
   'escaner.propios.v1',
   'escaner.diario.v1',
   'escaner.orden',
+  'escaner.plan.v1',
 ];
 
 export interface Backup {
@@ -41,6 +42,7 @@ export interface ImportSummary {
   productos: number;
   dias: number;
   citas: number;
+  plan: boolean;
 }
 
 function summarize(b: Backup): ImportSummary {
@@ -52,6 +54,7 @@ function summarize(b: Backup): ImportSummary {
     productos: count('escaner.historial.v1', (v) => v.length),
     dias: count('escaner.diario.v1', (v) => Object.keys(v).length),
     citas: count('escaner.citas.v1', (v) => v.length),
+    plan: !!b.datos['escaner.plan.v1'],
   };
 }
 

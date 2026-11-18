@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { History, Leaf, Plus, Search, Trash2 } from 'lucide-react';
+import { ClipboardList, History, Leaf, Plus, Search, Trash2 } from 'lucide-react';
 import type { Product } from '../lib/types.ts';
 import { addToHistory, loadHistory } from '../lib/storage.ts';
 import { FOODS } from '../lib/foods.ts';
 import { forGrams, itemGrams, mealTotals, pastMeals, type DiaryEntry, type MealItem, type PastMeal } from '../lib/diary.ts';
 import { fmt, plural } from '../lib/evaluate.ts';
+import { fruitPortion, fruitRaciones, loadPlan, mealTarget, vegRule } from '../lib/plan.ts';
 
 const MEALS = ['Desayuno', 'Media mañana', 'Almuerzo', 'Merienda', 'Cena'];
 /** Comidas en femenino, para escribir «una merienda» / «ninguna cena». */
@@ -27,6 +28,8 @@ const mealForTime = (t: string) => {
 interface Props {
   /** Para editar una comida ya apuntada. */
   initial?: DiaryEntry;
+  /** Día de entreno: cambia las raciones del plan del dietista. */
+  entreno: boolean;
   onSave: (e: Omit<DiaryEntry, 'id'>) => void;
   onCancel: () => void;
 }
@@ -35,7 +38,7 @@ interface Props {
  * Comida con varios ingredientes: se eligen productos ya escaneados (historial) con su cantidad y la
  * app suma calorías y macros.
  */
-export default function MealBuilder({ initial, onSave, onCancel }: Props) {
+export default function MealBuilder({ initial, entreno, onSave, onCancel }: Props) {
   const [time, setTime] = useState(initial?.time ?? nowHHMM());
   const [name, setName] = useState(() => (initial && MEALS.includes(initial.name) ? initial.name : mealForTime(initial?.time ?? nowHHMM())));
   const [items, setItems] = useState<MealItem[]>(initial?.items ?? []);
@@ -77,6 +80,11 @@ export default function MealBuilder({ initial, onSave, onCancel }: Props) {
   }, [q, mine]);
   const [creating, setCreating] = useState(false);
   const total = mealTotals(items);
+  // Plan del dietista: raciones de esta comida, verdura limitada y raciones de fruta.
+  const plan = useMemo(() => loadPlan(), []);
+  const target = mealTarget(plan, name, entreno);
+  const limited = items.filter((it) => vegRule(plan, it.product) === 'limitada');
+  const limitedG = limited.reduce((a, it) => a + itemGrams(it), 0);
 
   const add = (p: Product) => {
     setItems([...items, { product: p, qty: p.unitWeight ? 1 : 100, unit: p.unitWeight ? 'unidad' : 'g' }]);
@@ -103,6 +111,22 @@ export default function MealBuilder({ initial, onSave, onCancel }: Props) {
           <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
         </label>
       </div>
+
+      {target && (
+        <details className="plan-meal">
+          <summary>
+            <ClipboardList size={15} />
+            <span><b>{target.titulo}</b> en tu plan: {target.raciones} raciones · {target.hc} g HC · {target.prot} g prot. · {target.grasa} g grasa</span>
+          </summary>
+          {target.day.nota && <p className="small muted">{target.day.nota}</p>}
+          {target.day.grupos.map((g, k) => (
+            <div key={k} className="plan-group">
+              {g.grupo && <span className="plan-group-name">{g.grupo}</span>}
+              <ul>{g.opciones.map((o) => <li key={o}>{o}</li>)}</ul>
+            </div>
+          ))}
+        </details>
+      )}
 
       {!initial && (
         <label className="field">
@@ -158,6 +182,12 @@ export default function MealBuilder({ initial, onSave, onCancel }: Props) {
                 <div className="meal-item-detail">
                   {it.unit === 'unidad' ? `${fmt(g, 0)} ${u} (1 ${it.product.unitName ?? 'unidad'} = ${fmt(it.product.unitWeight!, 1)} ${u})` : `${fmt(g, 0)} ${u}`}
                   {' · '}{fmt(it.product.n.kcal ?? 0, 0)} kcal por 100 {u}
+                  {(() => {
+                    const fr = fruitPortion(plan, it.product);
+                    if (fr == null) return null;
+                    const r = fruitRaciones(fr, g);
+                    return <span className="plan-tag"> = {fmt(r, 1)} {r === 1 ? 'ración' : 'raciones'} de fruta</span>;
+                  })()}
                 </div>
               </div>
             );
@@ -200,9 +230,23 @@ export default function MealBuilder({ initial, onSave, onCancel }: Props) {
         )}
       </div>
 
+      {plan && limitedG > plan.verdura.limite && (
+        <p className="note warn-note">
+          Llevas {fmt(limitedG, 0)} g de {[...new Set(limited.map((it) => it.product.name.toLowerCase()))].join(', ')}. Tu dietista pone un máximo de {plan.verdura.limite} g por comida para estas verduras.
+        </p>
+      )}
+
       <div className="meal-total">
         <strong>{fmt(total.kcal, 0)} kcal</strong>
-        <span>{fmt(total.prot, 1)} g proteína · {fmt(total.hc, 1)} g hidratos · {fmt(total.grasa, 1)} g grasa</span>
+        {target ? (
+          <div className="meal-vs">
+            <VsPlan label="Hidratos" value={total.hc} goal={target.hc} />
+            <VsPlan label="Proteína" value={total.prot} goal={target.prot} />
+            <VsPlan label="Grasa" value={total.grasa} goal={target.grasa} />
+          </div>
+        ) : (
+          <span>{fmt(total.prot, 1)} g proteína · {fmt(total.hc, 1)} g hidratos · {fmt(total.grasa, 1)} g grasa</span>
+        )}
       </div>
 
       <div className="cita-actions">
@@ -210,6 +254,17 @@ export default function MealBuilder({ initial, onSave, onCancel }: Props) {
         <button className="btn primary small-btn" disabled={!items.length} onClick={save}>{initial ? 'Guardar cambios' : 'Añadir al diario'}</button>
       </div>
     </div>
+  );
+}
+
+/** Lo que lleva la comida frente a lo que marca el plan del dietista (±15 % se da por bueno). */
+export function VsPlan({ label, value, goal }: { label: string; value: number; goal: number }) {
+  const tone = goal <= 0 ? '' : value > goal * 1.15 ? 'high' : value >= goal * 0.85 ? 'ok' : 'muted';
+  return (
+    <span className={`vs ${tone}`}>
+      <small>{label}</small>
+      <b>{fmt(value, 0)}</b> / {fmt(goal, 0)} g
+    </span>
   );
 }
 
