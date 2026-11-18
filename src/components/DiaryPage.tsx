@@ -39,7 +39,8 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
     setDate(d);
     setAdding(null);
   };
-  const label = isToday ? 'Hoy' : date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+  const longDate = date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+  const label = isToday ? 'Hoy' : longDate.charAt(0).toUpperCase() + longDate.slice(1);
 
   return (
     <div className="page narrow">
@@ -89,7 +90,7 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
         )}
         {adding === 'manual' && <ManualEntry onCancel={() => setAdding(null)} onAdd={(e) => { addEntry(e, key); setAdding(null); refresh(); toast('Añadido al diario'); }} />}
         {entries.length ? (
-          <div className="list">
+          <div className="entries">
             {entries.map((e) => <EntryRow key={e.id} e={e} day={key} onOpen={onOpen} onChange={refresh} />)}
           </div>
         ) : (
@@ -126,14 +127,15 @@ function Macro({ label, value, max, goal }: { label: string; value: number; max:
 
 function EntryRow({ e, day, onOpen, onChange }: { e: DiaryEntry; day: string; onOpen: (p: Product) => void; onChange: () => void }) {
   const [editing, setEditing] = useState(false);
-  const [qty, setQty] = useState(String(e.units ?? e.grams ?? ''));
-  const qtyText = e.items
-    ? `${e.items.length} ${e.items.length === 1 ? 'producto' : 'productos'}`
-    : e.units != null ? `${fmt(e.units, 1)} ${e.units === 1 ? e.unitName : plural(e.unitName ?? 'unidad')}` : e.grams != null ? `${fmt(e.grams, 0)} ${e.product?.liquid ? 'ml' : 'g'}` : '';
+  const [qty, setQty] = useState(String(e.units ?? e.grams ?? '').replace('.', ','));
+  const unitOf = (p?: Product) => (p?.liquid ? 'ml' : 'g');
+  const single = !e.items && e.product && e.grams != null;
+  const qtyText = e.units != null ? `${fmt(e.units, 1)} ${e.units === 1 ? e.unitName : plural(e.unitName ?? 'unidad')}` : e.grams != null ? `${fmt(e.grams, 0)} ${unitOf(e.product)}` : null;
+  const meta = [qtyText, `${fmt(e.kcal, 0)} kcal`, `${fmt(e.prot, 0)} g prot.`, `${fmt(e.hc, 0)} g HC`, `${fmt(e.grasa, 0)} g grasa`].filter(Boolean).join(' · ');
 
   if (editing && e.items) {
     return (
-      <div className="list-item entry">
+      <div className="entry">
         <MealBuilder initial={e} onCancel={() => setEditing(false)} onSave={(m) => { updateEntry(e.id, m, day); setEditing(false); onChange(); }} />
       </div>
     );
@@ -149,37 +151,43 @@ function EntryRow({ e, day, onOpen, onChange }: { e: DiaryEntry; day: string; on
   };
 
   return (
-    <div className="list-item entry">
-      <span className="entry-time">{e.time}</span>
-      <button className="entry-main" onClick={() => (e.items || (e.product && e.grams != null) ? setEditing(!editing) : undefined)}>
-        <span className="list-name">
-          {e.name}
-          <small>{[qtyText, `${fmt(e.kcal, 0)} kcal`, `${fmt(e.prot, 0)} g prot.`].filter(Boolean).join(' · ')}</small>
-          {e.items && (
-            <small className="entry-items">
-              {e.items.map((i) => {
-                const u = i.product.liquid ? 'ml' : 'g';
-                const g = itemGrams(i);
-                const q = i.unit === 'unidad' ? `${fmt(i.qty, 1)} ${i.qty === 1 ? i.product.unitName ?? 'unidad' : plural(i.product.unitName ?? 'unidad')} (${fmt(g, 0)} ${u})` : `${fmt(g, 0)} ${u}`;
-                return `${q} ${i.product.name}: ${fmt(forGrams(i.product.n, g).kcal, 0)} kcal`;
-              }).join(' · ')}
-            </small>
-          )}
-        </span>
-      </button>
-      {editing && !e.items && (
+    <div className="entry">
+      <div className="entry-row">
+        <span className="entry-time">{e.time}</span>
+        <button className="entry-main" onClick={() => (e.items || single ? setEditing(!editing) : undefined)} aria-expanded={editing}>
+          <span className="entry-title">{e.name}</span>
+          <span className="entry-meta">{meta}</span>
+        </button>
+        <button className="icon-btn" aria-label={`Borrar ${e.name}`} onClick={() => { removeEntry(e.id, day); onChange(); }}>
+          <Trash2 size={16} />
+        </button>
+      </div>
+      {e.items && (
+        <ul className="entry-items">
+          {e.items.map((i, k) => {
+            const g = itemGrams(i);
+            const q = i.unit === 'unidad' ? `${fmt(i.qty, 1)} ${i.qty === 1 ? i.product.unitName ?? 'unidad' : plural(i.product.unitName ?? 'unidad')}` : `${fmt(g, 0)} ${unitOf(i.product)}`;
+            return (
+              <li key={k}>
+                <span>{q} · {i.product.name}</span>
+                <span>{fmt(forGrams(i.product.n, g).kcal, 0)} kcal</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {editing && single && (
         <div className="entry-edit">
-          <div className="with-unit">
-            <input inputMode="decimal" value={qty} onChange={(ev) => setQty(ev.target.value)} aria-label="Cantidad" />
-            <em>{e.units != null ? plural(e.unitName ?? 'unidad') : e.product?.liquid ? 'ml' : 'g'}</em>
+          <div className="entry-edit-row">
+            <div className="with-unit">
+              <input inputMode="decimal" value={qty} onChange={(ev) => setQty(ev.target.value)} aria-label="Cantidad" />
+              <em>{e.units != null ? plural(e.unitName ?? 'unidad') : unitOf(e.product)}</em>
+            </div>
+            <button className="btn primary small-btn" onClick={save}>Guardar</button>
           </div>
-          <button className="btn primary small-btn" onClick={save}>Guardar</button>
-          {e.product && <button className="btn ghost small-btn" onClick={() => onOpen(e.product!)}>Ver producto</button>}
+          <button className="link" onClick={() => onOpen(e.product!)}>Ver la valoración del producto</button>
         </div>
       )}
-      <button className="icon-btn" aria-label={`Borrar ${e.name}`} onClick={() => { removeEntry(e.id, day); onChange(); }}>
-        <Trash2 size={16} />
-      </button>
     </div>
   );
 }
