@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Barcode, Camera, History as HistoryIcon, Keyboard, Loader2, PenLine, ScanLine, Trash2, User, Image as ImageIcon } from 'lucide-react';
+import { Barcode, Camera, History as HistoryIcon, Keyboard, Loader2, NotebookPen, PenLine, ScanLine, Trash2, User, WifiOff, Image as ImageIcon } from 'lucide-react';
 import Scanner, { decodeBarcodePhoto } from './components/Scanner.tsx';
 import ProductForm from './components/ProductForm.tsx';
 import ResultView from './components/ResultView.tsx';
@@ -13,12 +13,16 @@ import { addToHistory, getCustom, loadHistory, removeFromHistory, saveCustom } f
 import { evaluate, VERDICT_TEXT } from './lib/evaluate.ts';
 import { today } from './lib/training.ts';
 import TodayChip from './components/TodayChip.tsx';
+import DiaryPage from './components/DiaryPage.tsx';
+import CompareView from './components/CompareView.tsx';
 
 type View =
   | { name: 'scan' }
   | { name: 'camera' }
   | { name: 'form'; product: Product; ocrText?: string; note?: string }
   | { name: 'result'; product: Product }
+  | { name: 'compare'; a: Product; b: Product }
+  | { name: 'diary' }
   | { name: 'history' }
   | { name: 'profile' };
 
@@ -35,6 +39,7 @@ export default function App() {
   const [msg, setMsg] = useState<string | null>(null);
   const [histVersion, setHistVersion] = useState(0);
   const [todayVersion, setTodayVersion] = useState(0);
+  const [online, setOnline] = useState(() => navigator.onLine);
   const labelInput = useRef<HTMLInputElement>(null);
   const codeInput = useRef<HTMLInputElement>(null);
   const pendingCode = useRef<string | undefined>(undefined);
@@ -59,6 +64,14 @@ export default function App() {
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, [toast]);
+
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
 
   // Cada pantalla empieza arriba del todo.
   useEffect(() => {
@@ -86,7 +99,17 @@ export default function App() {
     } else if (r.status === 'not-found') {
       pendingCode.current = code;
       setView({ name: 'form', product: blank(code), note: `El código ${code} no está en Open Food Facts. Haz una foto de la tabla nutricional o escribe los valores; se guardará para la próxima vez.` });
-    } else toast(r.message);
+    } else {
+      // Sin conexión: si el producto ya se escaneó antes, se valora con los datos guardados.
+      const known = loadHistory().find((h) => h.product.code === code)?.product;
+      if (known) {
+        toast('Sin conexión: uso los datos que guardé la última vez');
+        showResult(known);
+      } else {
+        pendingCode.current = code;
+        setView({ name: 'form', product: blank(code), note: `Sin conexión no puedo buscar el código ${code}. Haz una foto de la etiqueta (funciona sin internet una vez usada) o escribe los valores.` });
+      }
+    }
   }, [toast]);
 
   const readLabel = async (file: File) => {
@@ -152,20 +175,24 @@ export default function App() {
   const hoy = useMemo(() => today(profile), [profile, todayVersion, view.name]);
   const refreshToday = () => setTodayVersion((v) => v + 1);
 
-  const tab = view.name === 'history' ? 'history' : view.name === 'profile' ? 'profile' : 'scan';
-  const go = (name: 'scan' | 'history' | 'profile') => setView({ name } as View);
+  const tab = view.name === 'history' || view.name === 'profile' || view.name === 'diary' ? view.name : 'scan';
+  const go = (name: 'scan' | 'diary' | 'history' | 'profile') => setView({ name } as View);
 
   return (
     <div className="app">
       <nav className="nav" aria-label="Secciones">
         <div className="nav-brand"><img src="./favicon.svg" alt="" />Escáner nutricional</div>
         <button className={`nav-item ${tab === 'scan' ? 'on' : ''}`} onClick={() => go('scan')}><Barcode size={22} />Escanear</button>
+        <button className={`nav-item ${tab === 'diary' ? 'on' : ''}`} onClick={() => go('diary')}><NotebookPen size={22} />Diario</button>
         <button className={`nav-item ${tab === 'history' ? 'on' : ''}`} onClick={() => go('history')}><HistoryIcon size={22} />Historial</button>
         <button className={`nav-item ${tab === 'profile' ? 'on' : ''}`} onClick={() => go('profile')}><User size={22} />Perfil</button>
         <div className="nav-foot">Versión {__APP_VERSION__}</div>
       </nav>
 
       <main ref={main}>
+        {!online && view.name !== 'camera' && (
+          <div className="offline"><WifiOff size={15} /> Sin conexión: puedes valorar productos ya escaneados, fotos de etiquetas y valores a mano.</div>
+        )}
         {view.name === 'scan' && (
           <div className="page">
             <header className="page-head">
@@ -239,9 +266,20 @@ export default function App() {
             configured={configured}
             hoy={hoy}
             onTodayChange={refreshToday}
+            onOpen={(p) => showResult(p)}
+            onCompare={(b) => setView({ name: 'compare', a: view.product, b })}
+            toast={toast}
             onEdit={() => setView({ name: 'form', product: view.product })}
             onBack={() => go('scan')}
           />
+        )}
+
+        {view.name === 'compare' && (
+          <CompareView a={view.a} b={view.b} profile={profile} hoy={hoy} onOpen={(p) => showResult(p)} onBack={() => setView({ name: 'result', product: view.a })} />
+        )}
+
+        {view.name === 'diary' && (
+          <DiaryPage profile={profile} hoy={hoy} onOpen={(p) => setView({ name: 'result', product: p })} toast={toast} />
         )}
 
         {view.name === 'history' && (

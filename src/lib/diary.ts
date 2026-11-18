@@ -1,0 +1,102 @@
+// Diario del día: lo que se come, por fecha, y lo que queda del plan.
+
+import type { Product, Nutrients } from './types.ts';
+import type { DayPlan } from './profile.ts';
+
+export interface DiaryEntry {
+  id: string;
+  time: string; // HH:MM
+  name: string;
+  brand?: string;
+  /** Gramos o ml consumidos; null en las entradas a mano (solo con kcal y macros). */
+  grams: number | null;
+  units?: number;
+  unitName?: string;
+  kcal: number;
+  prot: number;
+  hc: number;
+  grasa: number;
+  /** Producto completo, para poder volver a valorarlo. */
+  product?: Product;
+}
+
+export interface Totals {
+  kcal: number;
+  prot: number;
+  hc: number;
+  grasa: number;
+}
+
+const KEY = 'escaner.diario.v1';
+const KEEP_DAYS = 120;
+
+export const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+function readAll(): Record<string, DiaryEntry[]> {
+  try {
+    return JSON.parse(localStorage.getItem(KEY) ?? '{}');
+  } catch {
+    return {};
+  }
+}
+
+function writeAll(all: Record<string, DiaryEntry[]>): void {
+  const keys = Object.keys(all).sort();
+  for (const k of keys.slice(0, Math.max(0, keys.length - KEEP_DAYS))) delete all[k];
+  try {
+    localStorage.setItem(KEY, JSON.stringify(all));
+  } catch { /* almacenamiento lleno */ }
+}
+
+export function loadDay(day = dayKey()): DiaryEntry[] {
+  return (readAll()[day] ?? []).sort((a, b) => a.time.localeCompare(b.time));
+}
+
+export function addEntry(e: Omit<DiaryEntry, 'id' | 'time'> & { time?: string }, day = dayKey()): void {
+  const all = readAll();
+  const now = new Date();
+  const time = e.time ?? `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  all[day] = [...(all[day] ?? []), { ...e, time, id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }];
+  writeAll(all);
+}
+
+export function removeEntry(id: string, day = dayKey()): void {
+  const all = readAll();
+  all[day] = (all[day] ?? []).filter((e) => e.id !== id);
+  if (!all[day].length) delete all[day];
+  writeAll(all);
+}
+
+export function updateEntry(id: string, patch: Partial<DiaryEntry>, day = dayKey()): void {
+  const all = readAll();
+  all[day] = (all[day] ?? []).map((e) => (e.id === id ? { ...e, ...patch } : e));
+  writeAll(all);
+}
+
+/** Valores de una cantidad de producto (por 100 g → gramos consumidos). */
+export function forGrams(n: Nutrients, grams: number): Totals {
+  const f = grams / 100;
+  return { kcal: (n.kcal ?? 0) * f, prot: (n.prot ?? 0) * f, hc: (n.hc ?? 0) * f, grasa: (n.grasa ?? 0) * f };
+}
+
+export function totals(entries: DiaryEntry[]): Totals {
+  return entries.reduce((t, e) => ({ kcal: t.kcal + e.kcal, prot: t.prot + e.prot, hc: t.hc + e.hc, grasa: t.grasa + e.grasa }), { kcal: 0, prot: 0, hc: 0, grasa: 0 });
+}
+
+export function remaining(plan: DayPlan, t: Totals): Totals {
+  return { kcal: plan.kcal - t.kcal, prot: plan.prot - t.prot, hc: plan.hc - t.hc, grasa: plan.grasa - t.grasa };
+}
+
+/**
+ * Gramos máximos que caben en lo que queda del día (calorías, hidratos y grasa). La proteína no
+ * limita: pasarse un poco de proteína no es un problema en un déficit.
+ */
+export function gramsLeft(n: Nutrients, left: Totals): { grams: number; by: 'kcal' | 'hc' | 'grasa' } | null {
+  const caps: { g: number; by: 'kcal' | 'hc' | 'grasa' }[] = [];
+  if (n.kcal && n.kcal > 0) caps.push({ g: (Math.max(0, left.kcal) / n.kcal) * 100, by: 'kcal' });
+  if (n.hc && n.hc > 0) caps.push({ g: (Math.max(0, left.hc) / n.hc) * 100, by: 'hc' });
+  if (n.grasa && n.grasa > 0) caps.push({ g: (Math.max(0, left.grasa) / n.grasa) * 100, by: 'grasa' });
+  if (!caps.length) return null;
+  const best = caps.reduce((a, b) => (b.g < a.g ? b : a));
+  return { grams: best.g, by: best.by };
+}

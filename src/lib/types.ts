@@ -30,6 +30,8 @@ export interface Product {
   unitName?: string;
   /** Etiquetas de categoría de Open Food Facts (en:olive-oils…). */
   categories?: string[];
+  /** Tiendas de Open Food Facts (mercadona, lidl…). */
+  stores?: string[];
   source: 'openfoodfacts' | 'foto' | 'manual';
 }
 

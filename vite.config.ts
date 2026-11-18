@@ -1,4 +1,5 @@
-import { cpSync, mkdirSync, readdirSync } from 'node:fs';
+import { cpSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { defineConfig } from 'vite';
 import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -23,9 +24,34 @@ function ocrAssets(): Plugin {
   };
 }
 
+/**
+ * Genera dist/sw.js (para usar la app sin conexión) con la lista de archivos de esta compilación.
+ * Cada despliegue cambia la versión, así el móvil descarta la caché anterior.
+ */
+function serviceWorker(): Plugin {
+  return {
+    name: 'service-worker',
+    apply: 'build',
+    closeBundle() {
+      const files: string[] = [];
+      const walk = (dir: string) => {
+        for (const f of readdirSync(dir)) {
+          const full = join(dir, f);
+          if (statSync(full).isDirectory()) { if (f !== 'ocr') walk(full); }
+          else files.push('./' + full.slice('dist/'.length));
+        }
+      };
+      walk('dist');
+      const version = Date.now().toString(36);
+      const tpl = readFileSync('src/sw-template.js', 'utf8');
+      writeFileSync('dist/sw.js', tpl.replace('__VERSION__', version).replace('__PRECACHE__', JSON.stringify(['./', ...files.filter((f) => f !== './sw.js')])));
+    },
+  };
+}
+
 export default defineConfig({
   base: './',
-  plugins: [react(), ocrAssets()],
+  plugins: [react(), ocrAssets(), serviceWorker()],
   define: {
     __APP_VERSION__: JSON.stringify(
       new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),

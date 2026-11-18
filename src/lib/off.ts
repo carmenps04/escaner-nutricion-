@@ -3,9 +3,9 @@
 import type { Product, Nutrients } from './types.ts';
 import { parseUnit } from './serving.ts';
 
-const FIELDS = [
+export const FIELDS = [
   'product_name', 'product_name_es', 'generic_name_es', 'brands', 'quantity', 'serving_size',
-  'nova_group', 'nutriscore_grade', 'categories_tags', 'image_front_small_url', 'nutriments',
+  'nova_group', 'nutriscore_grade', 'categories_tags', 'stores_tags', 'image_front_small_url', 'nutriments',
 ].join(',');
 
 export type OffResult =
@@ -45,6 +45,7 @@ export function fromOff(code: string, p: Record<string, any>): Product {
     unitWeight: unit?.weight,
     unitName: unit?.name,
     categories: cats,
+    stores: Array.isArray(p.stores_tags) ? p.stores_tags : undefined,
     source: 'openfoodfacts',
   };
 }

@@ -1,10 +1,13 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock, Dumbbell, Info, MinusCircle, Pencil, Sofa, XCircle } from 'lucide-react';
 import type { Product } from '../lib/types.ts';
 import type { Profile } from '../lib/profile.ts';
-import { evaluate, fmt, portionText, VERDICT_TEXT, type Portion } from '../lib/evaluate.ts';
+import { evaluate, fmt, plural, portionText, VERDICT_TEXT, type Portion } from '../lib/evaluate.ts';
 import { timingAdvice, type Today } from '../lib/training.ts';
 import TodayChip from './TodayChip.tsx';
+import Alternatives from './Alternatives.tsx';
+import AddToDiary from './AddToDiary.tsx';
+import { gramsLeft, loadDay, remaining, totals } from '../lib/diary.ts';
 
 interface Props {
   product: Product;
@@ -12,6 +15,9 @@ interface Props {
   configured: boolean;
   hoy: Today;
   onTodayChange: () => void;
+  onOpen: (p: Product) => void;
+  onCompare: (p: Product) => void;
+  toast: (m: string) => void;
   onEdit: () => void;
   onBack: () => void;
 }
@@ -27,11 +33,31 @@ const ROWS = [
   ['Sal', 'sal', 'g', 2],
 ] as const;
 
-export default function ResultView({ product, profile, configured, hoy, onTodayChange, onEdit, onBack }: Props) {
+export default function ResultView({ product, profile, configured, hoy, onTodayChange, onOpen, onCompare, toast, onEdit, onBack }: Props) {
   const e = useMemo(() => evaluate(product, profile), [product, profile]);
   const u = product.liquid ? 'ml' : 'g';
   const Icon = e.verdict === 'buena' ? CheckCircle2 : e.verdict === 'regular' ? MinusCircle : XCircle;
   const todayP = hoy.entreno ? e.entreno : e.descanso;
+  // Lo que ya llevas hoy en el diario: si queda poco, la cantidad máxima baja.
+  const [diaryVersion, setDiaryVersion] = useState(0);
+  const diaryNote = useMemo(() => {
+    const entries = loadDay();
+    if (!entries.length) return null;
+    const plan = hoy.entreno ? profile.entreno : profile.descanso;
+    const left = remaining(plan, totals(entries));
+    const head = `Hoy llevas ${fmt(plan.kcal - left.kcal, 0)} de ${fmt(plan.kcal, 0)} kcal.`;
+    if (left.kcal <= 0) return { tone: 'over', text: `${head} Ya has llegado a tus calorías de hoy: mejor déjalo para otro día.` };
+    const cap = gramsLeft(product.n, left);
+    if (!cap || todayP.grams == null || cap.grams >= todayP.grams) return { tone: 'ok', text: `${head} Te cabe la cantidad máxima.` };
+    const u = product.liquid ? 'ml' : 'g';
+    const by = { kcal: 'las calorías', hc: 'los hidratos', grasa: 'la grasa' }[cap.by];
+    const qty = product.unitWeight ? Math.floor(cap.grams / product.unitWeight) : Math.floor(cap.grams / 5) * 5;
+    const txt = product.unitWeight
+      ? (qty >= 1 ? `${qty} ${qty === 1 ? product.unitName ?? 'unidad' : plural(product.unitName ?? 'unidad')}` : `menos de 1 ${product.unitName ?? 'unidad'}`)
+      : `${fmt(qty, 0)} ${u}`;
+    return { tone: 'warn', text: `${head} Por ${by} que te quedan, hoy como máximo ${txt}.` };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product, profile, hoy, diaryVersion]);
   const ref = todayP.grams;
   // A un producto «buena opción» no se le pide esperar a un día de entreno.
   const advice = e.kind !== 'general' || (e.verdict === 'buena' && !hoy.entreno && e.macroKind === 'hc') ? null : timingAdvice(e.macroKind, hoy);
@@ -81,6 +107,7 @@ export default function ResultView({ product, profile, configured, hoy, onTodayC
             <h2 className="card-title">Cuánto como máximo por toma</h2>
             <div className="portions">{hoy.entreno ? boxes : [boxes[1], boxes[0]]}</div>
             {ref != null && <p className="small muted">El límite lo marca {todayP.limitedBy}.</p>}
+            {diaryNote && <p className={`note ${diaryNote.tone === 'ok' ? '' : 'warn-note'}`}>{diaryNote.text}</p>}
             <div className="freq-row">
               <Clock size={18} />
               <div>
@@ -90,15 +117,17 @@ export default function ResultView({ product, profile, configured, hoy, onTodayC
             </div>
           </section>
 
+          <AddToDiary key={product.code ?? product.name} product={product} suggested={todayP} onAdded={() => { setDiaryVersion((v) => v + 1); toast('Apuntado en el diario de hoy'); }} />
+        </div>
+
+        <div className="col">
+          <Alternatives product={product} profile={profile} hoy={hoy} onOpen={onOpen} onCompare={onCompare} />
           <section className="card">
             <h2 className="card-title">Por qué</h2>
             <ul className="reasons">
               {e.reasons.map((r) => <li key={r.text} className={`r-${r.tone}`}>{r.text}</li>)}
             </ul>
           </section>
-        </div>
-
-        <div className="col">
           <section className="card">
             <h2 className="card-title">Valores nutricionales</h2>
             <table className="table">
