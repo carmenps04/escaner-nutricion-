@@ -347,3 +347,11 @@ svg { flex: none; }
 .entry-items { color: var(--muted); white-space: normal; margin-top: 2px; }
 .entry .list-name { white-space: normal; }
 .meal-item-detail { font-size: 12px; color: var(--muted); }
+.past { display: flex; flex-direction: column; gap: 6px; }
+.past .picker-hint { padding: 2px 0; }
+.past-meal { display: flex; flex-direction: column; gap: 2px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.past-meal:hover { border-color: var(--accent-text); }
+.past-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.past-top small { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.past-meal > small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+.meal-head select { -webkit-appearance: none; appearance: none; }

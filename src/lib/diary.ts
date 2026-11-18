@@ -124,3 +124,33 @@ export function gramsLeft(n: Nutrients, left: Totals): { grams: number; by: 'kca
   const best = caps.reduce((a, b) => (b.g < a.g ? b : a));
   return { grams: best.g, by: best.by };
 }
+
+export interface PastMeal {
+  name: string;
+  items: MealItem[];
+  day: string;
+  time: string;
+  kcal: number;
+}
+
+/**
+ * Comidas anteriores con productos (las más recientes primero), sin repetir las que llevan los mismos
+ * productos y cantidades. Sirve para volver a apuntar el desayuno de siempre de un toque.
+ */
+export function pastMeals(limit = 20): PastMeal[] {
+  const all = readAll();
+  const out: PastMeal[] = [];
+  const seen = new Set<string>();
+  for (const day of Object.keys(all).sort().reverse()) {
+    const entries = [...all[day]].sort((a, b) => b.time.localeCompare(a.time));
+    for (const e of entries) {
+      if (!e.items?.length) continue;
+      const sig = `${e.name}|${e.items.map((i) => `${i.product.code ?? i.product.name}:${i.qty}${i.unit}`).join(',')}`;
+      if (seen.has(sig)) continue;
+      seen.add(sig);
+      out.push({ name: e.name, items: e.items, day, time: e.time, kcal: e.kcal });
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
+}

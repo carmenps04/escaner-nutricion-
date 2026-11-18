@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { AlertTriangle, CheckCircle2, Clock, Dumbbell, Info, MinusCircle, Pencil, Sofa, XCircle } from 'lucide-react';
 import type { Product } from '../lib/types.ts';
 import type { Profile } from '../lib/profile.ts';
@@ -6,7 +6,6 @@ import { evaluate, fmt, plural, portionText, VERDICT_TEXT, type Portion } from '
 import { timingAdvice, type Today } from '../lib/training.ts';
 import TodayChip from './TodayChip.tsx';
 import Alternatives from './Alternatives.tsx';
-import AddToDiary from './AddToDiary.tsx';
 import { gramsLeft, loadDay, remaining, totals } from '../lib/diary.ts';
 
 interface Props {
@@ -17,7 +16,6 @@ interface Props {
   onTodayChange: () => void;
   onOpen: (p: Product) => void;
   onCompare: (p: Product) => void;
-  toast: (m: string) => void;
   onEdit: () => void;
   onBack: () => void;
 }
@@ -33,13 +31,12 @@ const ROWS = [
   ['Sal', 'sal', 'g', 2],
 ] as const;
 
-export default function ResultView({ product, profile, configured, hoy, onTodayChange, onOpen, onCompare, toast, onEdit, onBack }: Props) {
+export default function ResultView({ product, profile, configured, hoy, onTodayChange, onOpen, onCompare, onEdit, onBack }: Props) {
   const e = useMemo(() => evaluate(product, profile), [product, profile]);
   const u = product.liquid ? 'ml' : 'g';
   const Icon = e.verdict === 'buena' ? CheckCircle2 : e.verdict === 'regular' ? MinusCircle : XCircle;
   const todayP = hoy.entreno ? e.entreno : e.descanso;
   // Lo que ya llevas hoy en el diario: si queda poco, la cantidad máxima baja.
-  const [diaryVersion, setDiaryVersion] = useState(0);
   const diaryNote = useMemo(() => {
     const entries = loadDay();
     if (!entries.length) return null;
@@ -57,7 +54,7 @@ export default function ResultView({ product, profile, configured, hoy, onTodayC
       : `${fmt(qty, 0)} ${u}`;
     return { tone: 'warn', text: `${head} Por ${by} que te quedan, hoy como máximo ${txt}.` };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product, profile, hoy, diaryVersion]);
+  }, [product, profile, hoy]);
   const ref = todayP.grams;
   // A un producto «buena opción» no se le pide esperar a un día de entreno.
   const advice = e.kind !== 'general' || (e.verdict === 'buena' && !hoy.entreno && e.macroKind === 'hc') ? null : timingAdvice(e.macroKind, hoy);
@@ -117,7 +114,6 @@ export default function ResultView({ product, profile, configured, hoy, onTodayC
             </div>
           </section>
 
-          <AddToDiary key={product.code ?? product.name} product={product} suggested={todayP} onAdded={() => { setDiaryVersion((v) => v + 1); toast('Apuntado en el diario de hoy'); }} />
         </div>
 
         <div className="col">

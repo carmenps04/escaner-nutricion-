@@ -264,7 +264,6 @@ export default function App() {
             onTodayChange={refreshToday}
             onOpen={(p) => showResult(p)}
             onCompare={(b) => setView({ name: 'compare', a: view.product, b })}
-            toast={toast}
             onEdit={() => setView({ name: 'form', product: view.product })}
             onBack={() => go('scan')}
           />
