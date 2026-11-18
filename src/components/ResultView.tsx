@@ -3,11 +3,15 @@ import { AlertTriangle, CheckCircle2, Clock, Dumbbell, Info, MinusCircle, Pencil
 import type { Product } from '../lib/types.ts';
 import type { Profile } from '../lib/profile.ts';
 import { evaluate, fmt, portionText, VERDICT_TEXT, type Portion } from '../lib/evaluate.ts';
+import { timingAdvice, type Today } from '../lib/training.ts';
+import TodayChip from './TodayChip.tsx';
 
 interface Props {
   product: Product;
   profile: Profile;
   configured: boolean;
+  hoy: Today;
+  onTodayChange: () => void;
   onEdit: () => void;
   onBack: () => void;
 }
@@ -23,11 +27,18 @@ const ROWS = [
   ['Sal', 'sal', 'g', 2],
 ] as const;
 
-export default function ResultView({ product, profile, configured, onEdit, onBack }: Props) {
+export default function ResultView({ product, profile, configured, hoy, onTodayChange, onEdit, onBack }: Props) {
   const e = useMemo(() => evaluate(product, profile), [product, profile]);
   const u = product.liquid ? 'ml' : 'g';
   const Icon = e.verdict === 'buena' ? CheckCircle2 : e.verdict === 'regular' ? MinusCircle : XCircle;
-  const ref = e.descanso.grams;
+  const todayP = hoy.entreno ? e.entreno : e.descanso;
+  const ref = todayP.grams;
+  // A un producto «buena opción» no se le pide esperar a un día de entreno.
+  const advice = e.kind !== 'general' || (e.verdict === 'buena' && !hoy.entreno && e.macroKind === 'hc') ? null : timingAdvice(e.macroKind, hoy);
+  const boxes = [
+    <PortionBox key="e" title="Con entreno" icon={<Dumbbell size={16} />} p={e.entreno} product={product} isToday={hoy.entreno} />,
+    <PortionBox key="d" title="Sin entreno" icon={<Sofa size={16} />} p={e.descanso} product={product} isToday={!hoy.entreno} />,
+  ];
 
   return (
     <div className="page">
@@ -41,6 +52,8 @@ export default function ResultView({ product, profile, configured, onEdit, onBac
           </div>
         </div>
       </header>
+
+      <TodayChip hoy={hoy} onChange={onTodayChange} />
 
       {!configured && <p className="note warn-note">Estás usando valores de ejemplo. Configura tu perfil para que la valoración sea la tuya.</p>}
 
@@ -66,16 +79,13 @@ export default function ResultView({ product, profile, configured, onEdit, onBac
 
           <section className="card">
             <h2 className="card-title">Cuánto como máximo por toma</h2>
-            <div className="portions">
-              <PortionBox title="Día de entreno" icon={<Dumbbell size={16} />} p={e.entreno} product={product} />
-              <PortionBox title="Día sin entreno" icon={<Sofa size={16} />} p={e.descanso} product={product} />
-            </div>
-            {ref != null && <p className="small muted">El límite lo marca {e.descanso.limitedBy}.</p>}
+            <div className="portions">{hoy.entreno ? boxes : [boxes[1], boxes[0]]}</div>
+            {ref != null && <p className="small muted">El límite lo marca {todayP.limitedBy}.</p>}
             <div className="freq-row">
               <Clock size={18} />
               <div>
                 <p><b>Frecuencia:</b> {e.frequency}</p>
-                {e.timing && <p className="muted">{e.timing}</p>}
+                {advice && <p className="muted">{advice}</p>}
               </div>
             </div>
           </section>
@@ -96,7 +106,7 @@ export default function ResultView({ product, profile, configured, onEdit, onBac
                 <tr>
                   <th />
                   <th>100 {u}</th>
-                  {ref != null && <th>{portionText(e.descanso, product).replace(/ \(.*\)/, '')}</th>}
+                  {ref != null && <th>{portionText(todayP, product).replace(/ \(.*\)/, '')}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -129,15 +139,15 @@ export default function ResultView({ product, profile, configured, onEdit, onBac
   );
 }
 
-function PortionBox({ title, icon, p, product }: { title: string; icon: React.ReactNode; p: Portion; product: Product }) {
+function PortionBox({ title, icon, p, product, isToday }: { title: string; icon: React.ReactNode; p: Portion; product: Product; isToday: boolean }) {
   // «3 galletas» en grande y los gramos y calorías debajo, para que no se parta en dos líneas.
   const text = portionText(p, product);
   const m = text.match(/^(.*?) \((.*)\)$/);
   const main = m ? m[1] : text;
   const extra = [m?.[2], p.kcal != null ? `${fmt(p.kcal, 0)} kcal` : null, p.pctDayKcal != null ? `${fmt(p.pctDayKcal, 0)} % del día` : null].filter(Boolean).join(' · ');
   return (
-    <div className="portion">
-      <span className="portion-title">{icon} {title}</span>
+    <div className={`portion ${isToday ? 'today-portion' : 'other'}`}>
+      <span className="portion-title">{icon} {title}{isToday && <span className="badge">Hoy</span>}</span>
       <strong>{main}</strong>
       {extra && <small>{extra}</small>}
       {p.prot != null && <small>{fmt(p.prot, 0)} g de proteína</small>}

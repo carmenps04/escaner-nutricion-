@@ -8,6 +8,7 @@ import { parseDietSheet } from '../lib/parseDietSheet.ts';
 import { readImage, statusText } from '../lib/ocr.ts';
 import { fmt } from '../lib/evaluate.ts';
 import CitasCard from './CitasCard.tsx';
+import TrainingCard from './TrainingCard.tsx';
 
 const num = (s: string) => {
   const t = s.replace(',', '.').trim();
@@ -96,6 +97,7 @@ export default function ProfilePage({ profile, configured, onSaved, toast }: Pro
         <div className="col">
           <PlanCard title="Días sin entreno" icon={<Sofa size={15} />} d={p.descanso} onChange={(patch) => setDay('descanso', patch)} />
           <PlanCard title="Días de entreno" icon={<Dumbbell size={15} />} d={p.entreno} onChange={(patch) => setDay('entreno', patch)} />
+          <TrainingCard semana={p.semana ?? []} onChange={(semana) => setP((old) => ({ ...old, semana, diasEntrenoSemana: semana.length }))} />
           <p className="small muted">
             Las raciones se leen como hidratos · proteína · grasa, a 10 g cada una (16.12.5 = 160 g de hidratos, 120 g de proteína y 50 g de grasa). Cuadra con las calorías de la hoja, pero es una suposición: confírmala con tu dietista.
           </p>
@@ -130,7 +132,6 @@ export default function ProfilePage({ profile, configured, onSaved, toast }: Pro
               <NumField label="GMT + NEAT" unit="kcal" value={p.gmtNeat} onCommit={(v) => set('gmtNeat', v)} />
               <NumField label="Gasto del entreno" unit="kcal" value={p.gastoEntreno} onCommit={(v) => set('gastoEntreno', v)} />
               <NumField label="Déficit o superávit" unit="%" value={p.deficitPct} onCommit={(v) => set('deficitPct', v)} />
-              <NumField label="Entrenos" unit="/sem" value={p.diasEntrenoSemana} onCommit={(v) => set('diasEntrenoSemana', v)} />
             </div>
           </section>
 

@@ -1,5 +1,7 @@
 // Perfil: los datos que da el dietista en cada cita.
 
+import type { TrainingDay } from './training.ts';
+
 export type Objetivo = 'deficit' | 'mantenimiento' | 'volumen' | 'recomposicion';
 
 export const OBJETIVOS: Record<Objetivo, string> = {
@@ -32,6 +34,8 @@ export interface Profile {
   objetivo: Objetivo;
   deficitPct?: number;
   diasEntrenoSemana: number;
+  /** Días de entreno de la semana, con la sesión y la hora. */
+  semana?: TrainingDay[];
   descanso: DayPlan;
   entreno: DayPlan;
 }

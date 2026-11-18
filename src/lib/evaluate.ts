@@ -48,6 +48,8 @@ export interface Evaluation {
   reasons: Reason[];
   frequency: string;
   timing: string | null;
+  /** Tipo de producto para el consejo de momento del día: hidratos con poca grasa, o sobre todo grasa. */
+  macroKind: 'hc' | 'grasa' | null;
   descanso: Portion;
   entreno: Portion;
   warnings: string[];
@@ -234,14 +236,15 @@ export function evaluate(p: Product, profile: Profile): Evaluation {
 
   // Momento del día: productos de hidratos con poca grasa encajan mejor alrededor del entreno.
   let timing: string | null = null;
+  let macroKind: Evaluation['macroKind'] = null;
   if (n.kcal && n.hc != null && n.grasa != null && kind === 'general') {
     const hcShare = (n.hc * 4) / n.kcal;
     const fatShare = (n.grasa * 9) / n.kcal;
-    if (hcShare >= 0.55 && fatShare <= 0.3) timing = 'Son sobre todo hidratos: encaja mejor en días de entreno, antes o después de entrenar.';
-    else if (fatShare >= 0.5) timing = 'Es sobre todo grasa: mejor lejos del entreno y sin juntarlo con otras grasas en la misma comida.';
+    if (hcShare >= 0.55 && fatShare <= 0.3) { macroKind = 'hc'; timing = 'Son sobre todo hidratos: encaja mejor en días de entreno, antes o después de entrenar.'; }
+    else if (fatShare >= 0.5) { macroKind = 'grasa'; timing = 'Es sobre todo grasa: mejor lejos del entreno y sin juntarlo con otras grasas en la misma comida.'; }
   }
 
-  return { score: Math.round(score), verdict, reasons, frequency: frequency(verdict, score, timing != null && timing.startsWith('Son'), kind), timing, descanso, entreno, warnings, kind };
+  return { score: Math.round(score), verdict, reasons, frequency: frequency(verdict, score, macroKind === 'hc', kind), timing, macroKind, descanso, entreno, warnings, kind };
 }
 
 function frequency(v: Verdict, score: number, carbHeavy: boolean, kind: Evaluation['kind']): string {

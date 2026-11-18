@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Barcode, Camera, History as HistoryIcon, Keyboard, Loader2, PenLine, ScanLine, Trash2, User, Image as ImageIcon } from 'lucide-react';
 import Scanner, { decodeBarcodePhoto } from './components/Scanner.tsx';
 import ProductForm from './components/ProductForm.tsx';
@@ -11,6 +11,8 @@ import { parseLabel } from './lib/parseLabel.ts';
 import { readImage, statusText } from './lib/ocr.ts';
 import { addToHistory, getCustom, loadHistory, removeFromHistory, saveCustom } from './lib/storage.ts';
 import { evaluate, VERDICT_TEXT } from './lib/evaluate.ts';
+import { today } from './lib/training.ts';
+import TodayChip from './components/TodayChip.tsx';
 
 type View =
   | { name: 'scan' }
@@ -32,6 +34,7 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [histVersion, setHistVersion] = useState(0);
+  const [todayVersion, setTodayVersion] = useState(0);
   const labelInput = useRef<HTMLInputElement>(null);
   const codeInput = useRef<HTMLInputElement>(null);
   const pendingCode = useRef<string | undefined>(undefined);
@@ -145,6 +148,10 @@ export default function App() {
     showResult(p);
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const hoy = useMemo(() => today(profile), [profile, todayVersion, view.name]);
+  const refreshToday = () => setTodayVersion((v) => v + 1);
+
   const tab = view.name === 'history' ? 'history' : view.name === 'profile' ? 'profile' : 'scan';
   const go = (name: 'scan' | 'history' | 'profile') => setView({ name } as View);
 
@@ -167,6 +174,7 @@ export default function App() {
                 <p>Escanea un producto y te digo si encaja en tu plan.</p>
               </div>
             </header>
+            {configured && <TodayChip hoy={hoy} onChange={refreshToday} />}
             {!configured && (
               <button className="setup" onClick={() => go('profile')}>
                 <strong>Primero, configura tu perfil</strong>
@@ -229,6 +237,8 @@ export default function App() {
             product={view.product}
             profile={profile}
             configured={configured}
+            hoy={hoy}
+            onTodayChange={refreshToday}
             onEdit={() => setView({ name: 'form', product: view.product })}
             onBack={() => go('scan')}
           />
