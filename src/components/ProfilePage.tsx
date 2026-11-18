@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { Camera, Link2, Save } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Camera, Dumbbell, Link2, Loader2, Sofa } from 'lucide-react';
 import {
   OBJETIVOS, imc, loadCitas, macroKcal, racionesToGrams, saveProfile,
   type DayPlan, type Objetivo, type Profile,
@@ -14,15 +14,23 @@ const num = (s: string) => {
 };
 const str = (v: number | undefined) => (v == null ? '' : String(v).replace('.', ','));
 
-export default function ProfilePage({ profile, onSaved, toast }: { profile: Profile; onSaved: (p: Profile) => void; toast: (m: string) => void }) {
+interface Props {
+  profile: Profile;
+  configured: boolean;
+  onSaved: (p: Profile) => void;
+  toast: (m: string) => void;
+}
+
+export default function ProfilePage({ profile, configured, onSaved, toast }: Props) {
   const [p, setP] = useState<Profile>(profile);
   const [busy, setBusy] = useState<string | null>(null);
   const [found, setFound] = useState<string[] | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const citas = loadCitas();
+  const dirty = !configured || JSON.stringify(p) !== JSON.stringify(profile);
 
-  const set = <K extends keyof Profile>(k: K, v: Profile[K]) => setP({ ...p, [k]: v });
-  const setDay = (day: 'descanso' | 'entreno', patch: Partial<DayPlan>) => setP({ ...p, [day]: { ...p[day], ...patch } });
+  const set = <K extends keyof Profile>(k: K, v: Profile[K]) => setP((old) => ({ ...old, [k]: v }));
+  const setDay = (day: 'descanso' | 'entreno', patch: Partial<DayPlan>) => setP((old) => ({ ...old, [day]: { ...old[day], ...patch } }));
 
   const readSheet = async (f: File) => {
     setBusy('Preparando el lector…');
@@ -54,149 +62,161 @@ export default function ProfilePage({ profile, onSaved, toast }: { profile: Prof
     const url = `${location.origin}${location.pathname}#perfil=${b64}`;
     try {
       await navigator.clipboard.writeText(url);
-      toast('Enlace copiado: ábrelo en otro dispositivo para cargar tu perfil');
+      toast('Enlace copiado. Ábrelo en el otro dispositivo para cargar tu perfil.');
     } catch {
       prompt('Copia este enlace', url);
     }
   };
 
-  const Num = ({ label, k, unit }: { label: string; k: keyof Profile; unit: string }) => (
-    <NumField label={label} unit={unit} value={p[k] as number} onCommit={(v) => set(k, v as never)} />
-  );
-
   return (
-    <div className="page">
-      <h1>Mi perfil</h1>
-      <p className="muted">Los datos de tu última cita con el dietista. Se guardan solo en este móvil.</p>
-
-      <button className="btn primary wide" onClick={() => file.current?.click()} disabled={!!busy}>
-        <Camera size={18} /> {busy ?? 'Leer la hoja del dietista (foto o captura)'}
-      </button>
-      <input ref={file} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) readSheet(f); e.target.value = ''; }} />
-      {found && (
-        <p className="note">
-          {found.length ? <>He leído: {found.join(', ')}. Revisa los números y pulsa <b>Guardar</b>.</> : 'No he encontrado datos en la foto. Prueba con una captura más nítida o rellénalo a mano.'}
-        </p>
-      )}
-
-      <div className="card">
-        <h2>Composición corporal</h2>
-        <label className="field">
-          <span>Fecha de la antropometría</span>
-          <input type="date" value={p.fecha} onChange={(e) => set('fecha', e.target.value)} />
-        </label>
-        <div className="two">
-          {Num({ label: "Peso", k: "peso", unit: "kg" })}
-          {Num({ label: "Talla", k: "talla", unit: "cm" })}
-          {Num({ label: "Masa libre de grasa", k: "mlg", unit: "kg" })}
-          {Num({ label: "Grasa", k: "pctGrasa", unit: "%" })}
-          {Num({ label: "Kg de grasa", k: "kgGrasa", unit: "kg" })}
-          <div className="field"><span>IMC</span><div className="readonly">{p.talla ? fmt(imc(p)) : '—'}</div></div>
+    <div className={`page ${dirty ? 'has-savebar' : ''}`}>
+      <header className="page-head">
+        <div>
+          <h1>Mi perfil</h1>
+          <p>Datos de tu última cita con el dietista. Se guardan solo en este dispositivo.</p>
         </div>
-      </div>
+      </header>
 
-      <div className="card">
-        <h2>Gasto y objetivo</h2>
-        <div className="two">
-          {Num({ label: "GMT + NEAT", k: "gmtNeat", unit: "kcal" })}
-          {Num({ label: "Gasto del entreno", k: "gastoEntreno", unit: "kcal" })}
-        </div>
-        <label className="field">
-          <span>Objetivo</span>
-          <select value={p.objetivo} onChange={(e) => set('objetivo', e.target.value as Objetivo)}>
-            {Object.entries(OBJETIVOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </label>
-        <div className="two">
-          {Num({ label: "Déficit / superávit", k: "deficitPct", unit: "%" })}
-          {Num({ label: "Días de entreno", k: "diasEntrenoSemana", unit: "/sem" })}
-        </div>
-      </div>
+      <section className="card">
+        <button className="btn primary wide" onClick={() => file.current?.click()} disabled={!!busy}>
+          {busy ? <Loader2 className="spin" size={18} /> : <Camera size={18} />}
+          {busy ?? 'Leer la hoja del dietista'}
+        </button>
+        <input ref={file} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) readSheet(f); e.target.value = ''; }} />
+        {found ? (
+          <p className="note">
+            {found.length ? <>He leído: {found.join(', ')}. Revisa los números y pulsa <b>Guardar</b>.</> : 'No he encontrado datos en la foto. Prueba con una captura más nítida o rellénalo a mano.'}
+          </p>
+        ) : (
+          <p className="small muted">Sirve una foto o una captura del PDF. Después revisa los números antes de guardar.</p>
+        )}
+      </section>
 
-      {(['descanso', 'entreno'] as const).map((day) => {
-        const d = p[day];
-        const diff = macroKcal(d) - d.kcal;
-        return (
-          <div className="card" key={day}>
-            <h2>{day === 'entreno' ? 'Días de entreno' : 'Días sin entreno'}</h2>
-            <div className="two">
-              <label className="field">
-                <span>Calorías</span>
-                <div className="with-unit">
-                  <input inputMode="numeric" defaultValue={str(d.kcal)} key={`${day}k-${d.kcal}`} onBlur={(e) => setDay(day, { kcal: num(e.target.value) })} />
-                  <em>kcal</em>
-                </div>
-              </label>
-              <label className="field">
-                <span>Raciones HC·P·G</span>
-                <input
-                  defaultValue={d.raciones ?? ''}
-                  key={`${day}r-${d.raciones}`}
-                  placeholder="16.12.5"
-                  onBlur={(e) => {
-                    const g = racionesToGrams(e.target.value);
-                    setDay(day, g ? { raciones: e.target.value, ...g } : { raciones: e.target.value });
-                  }}
-                />
-              </label>
+      <div className="cols">
+        <div className="col">
+          <PlanCard title="Días sin entreno" icon={<Sofa size={15} />} d={p.descanso} onChange={(patch) => setDay('descanso', patch)} />
+          <PlanCard title="Días de entreno" icon={<Dumbbell size={15} />} d={p.entreno} onChange={(patch) => setDay('entreno', patch)} />
+          <p className="small muted">
+            Las raciones se leen como hidratos · proteína · grasa, a 10 g cada una (16.12.5 = 160 g de hidratos, 120 g de proteína y 50 g de grasa). Cuadra con las calorías de la hoja, pero es una suposición: confírmala con tu dietista.
+          </p>
+        </div>
+
+        <div className="col">
+          <section className="card">
+            <h2 className="card-title">Composición corporal</h2>
+            <label className="field">
+              <span>Fecha de la medición</span>
+              <input type="date" value={p.fecha} onChange={(e) => set('fecha', e.target.value)} />
+            </label>
+            <div className="grid-2">
+              <NumField label="Peso" unit="kg" value={p.peso} onCommit={(v) => set('peso', v)} />
+              <NumField label="Talla" unit="cm" value={p.talla} onCommit={(v) => set('talla', v)} />
+              <NumField label="Grasa" unit="%" value={p.pctGrasa} onCommit={(v) => set('pctGrasa', v)} />
+              <NumField label="Kg de grasa" unit="kg" value={p.kgGrasa} onCommit={(v) => set('kgGrasa', v)} />
+              <NumField label="Masa libre de grasa" unit="kg" value={p.mlg} onCommit={(v) => set('mlg', v)} />
+              <div className="field"><span>IMC</span><div className="readonly">{p.talla ? fmt(imc(p)) : '—'}</div></div>
             </div>
-            <div className="three">
-              {(['hc', 'prot', 'grasa'] as const).map((k) => (
-                <label className="field" key={k}>
-                  <span>{{ hc: 'Hidratos', prot: 'Proteína', grasa: 'Grasa' }[k]}</span>
-                  <div className="with-unit">
-                    <input inputMode="numeric" defaultValue={str(d[k])} key={`${day}${k}-${d[k]}`} onBlur={(e) => setDay(day, { [k]: num(e.target.value) })} />
-                    <em>g</em>
-                  </div>
-                </label>
-              ))}
-            </div>
-            <p className="muted small">
-              Los macros suman {fmt(macroKcal(d), 0)} kcal{Math.abs(diff) > 60 ? ` (${diff > 0 ? '+' : ''}${fmt(diff, 0)} respecto a las calorías: revisa los gramos)` : ''}.
-            </p>
-          </div>
-        );
-      })}
-      <p className="note small">
-        Las raciones se leen como hidratos · proteína · grasa, a 10 g por ración (16.12.5 = 160 g de hidratos, 120 g de proteína y 50 g de grasa). Es una suposición que cuadra con las calorías de la hoja: confírmala con tu dietista y, si el orden es otro, cambia los gramos.
-      </p>
+          </section>
 
-      <div className="actions sticky">
-        <button className="btn ghost" onClick={shareLink}><Link2 size={16} /> Copiar enlace</button>
-        <button className="btn primary" onClick={save}><Save size={16} /> Guardar</button>
+          <section className="card">
+            <h2 className="card-title">Gasto y objetivo</h2>
+            <label className="field">
+              <span>Objetivo</span>
+              <select value={p.objetivo} onChange={(e) => set('objetivo', e.target.value as Objetivo)}>
+                {Object.entries(OBJETIVOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </label>
+            <div className="grid-2">
+              <NumField label="GMT + NEAT" unit="kcal" value={p.gmtNeat} onCommit={(v) => set('gmtNeat', v)} />
+              <NumField label="Gasto del entreno" unit="kcal" value={p.gastoEntreno} onCommit={(v) => set('gastoEntreno', v)} />
+              <NumField label="Déficit o superávit" unit="%" value={p.deficitPct} onCommit={(v) => set('deficitPct', v)} />
+              <NumField label="Entrenos" unit="/sem" value={p.diasEntrenoSemana} onCommit={(v) => set('diasEntrenoSemana', v)} />
+            </div>
+          </section>
+
+          {citas.length > 0 && (
+            <section className="card">
+              <h2 className="card-title">Evolución por citas</h2>
+              <table className="table">
+                <thead><tr><th>Fecha</th><th>Peso</th><th>% grasa</th><th>MLG</th></tr></thead>
+                <tbody>
+                  {[...citas].reverse().map((c) => (
+                    <tr key={c.fecha}>
+                      <td>{new Date(c.fecha + 'T12:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: '2-digit' })}</td>
+                      <td>{fmt(c.peso)} kg</td>
+                      <td>{fmt(c.pctGrasa)} %</td>
+                      <td>{fmt(c.mlg)} kg</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+
+          {configured && (
+            <button className="link" onClick={shareLink}><Link2 size={14} style={{ verticalAlign: '-2px' }} /> Copiar enlace para pasar el perfil a otro dispositivo</button>
+          )}
+        </div>
       </div>
 
-      {citas.length > 0 && (
-        <div className="card">
-          <h2>Evolución por citas</h2>
-          <table className="nutri-table">
-            <thead><tr><th>Fecha</th><th>Peso</th><th>% grasa</th><th>MLG</th></tr></thead>
-            <tbody>
-              {[...citas].reverse().map((c) => (
-                <tr key={c.fecha}>
-                  <td>{new Date(c.fecha + 'T12:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: '2-digit' })}</td>
-                  <td>{fmt(c.peso)} kg</td>
-                  <td>{fmt(c.pctGrasa)} %</td>
-                  <td>{fmt(c.mlg)} kg</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {dirty && (
+        <div className="savebar">
+          <span>{configured ? 'Tienes cambios sin guardar' : 'Revisa tus datos y guárdalos'}</span>
+          {configured && <button className="btn ghost" onClick={() => { setP(profile); setFound(null); }}>Descartar</button>}
+          <button className="btn primary" onClick={save}>Guardar</button>
         </div>
       )}
-      <p className="version">Versión {__APP_VERSION__}</p>
     </div>
   );
 }
 
+function PlanCard({ title, icon, d, onChange }: { title: string; icon: React.ReactNode; d: DayPlan; onChange: (p: Partial<DayPlan>) => void }) {
+  const diff = macroKcal(d) - d.kcal;
+  return (
+    <section className="card">
+      <h2 className="card-title">{icon} {title}</h2>
+      <div className="grid-2">
+        <NumField label="Calorías" unit="kcal" value={d.kcal} onCommit={(v) => onChange({ kcal: v })} />
+        <RacionesField value={d.raciones ?? ''} onChange={(r) => {
+          const g = racionesToGrams(r);
+          onChange(g ? { raciones: r, ...g } : { raciones: r });
+        }} />
+      </div>
+      <div className="grid-3">
+        <NumField label="Hidratos" unit="g" value={d.hc} onCommit={(v) => onChange({ hc: v })} />
+        <NumField label="Proteína" unit="g" value={d.prot} onCommit={(v) => onChange({ prot: v })} />
+        <NumField label="Grasa" unit="g" value={d.grasa} onCommit={(v) => onChange({ grasa: v })} />
+      </div>
+      <p className={`small ${Math.abs(diff) > 60 ? '' : 'muted'}`}>
+        Los macros suman {fmt(macroKcal(d), 0)} kcal{Math.abs(diff) > 60 ? `: ${diff > 0 ? '+' : ''}${fmt(diff, 0)} respecto a las calorías, revisa los gramos.` : '.'}
+      </p>
+    </section>
+  );
+}
+
 function NumField({ label, unit, value, onCommit }: { label: string; unit: string; value: number | undefined; onCommit: (v: number) => void }) {
+  const [text, setText] = useState(str(value));
+  // Si el valor cambia desde fuera (foto de la hoja, descartar), se actualiza el campo.
+  useEffect(() => {
+    if (num(text) !== (value ?? 0)) setText(str(value));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
   return (
     <label className="field">
       <span>{label}</span>
       <div className="with-unit">
-        <input inputMode="decimal" defaultValue={str(value)} key={String(value)} onBlur={(e) => onCommit(num(e.target.value))} />
+        <input inputMode="decimal" value={text} onChange={(e) => { setText(e.target.value); onCommit(num(e.target.value)); }} />
         <em>{unit}</em>
       </div>
+    </label>
+  );
+}
+
+function RacionesField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="field">
+      <span>Raciones HC·P·G</span>
+      <input value={value} placeholder="16.12.5" inputMode="decimal" onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }

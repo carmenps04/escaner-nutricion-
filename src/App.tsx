@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Barcode, Camera, History as HistoryIcon, Keyboard, Loader2, PenLine, ScanLine, Trash2, User, Image as ImageIcon } from 'lucide-react';
 import Scanner, { decodeBarcodePhoto } from './components/Scanner.tsx';
 import ProductForm from './components/ProductForm.tsx';
@@ -31,17 +31,40 @@ export default function App() {
   const [configured, setConfigured] = useState(hasProfile);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [histVersion, setHistVersion] = useState(0);
   const labelInput = useRef<HTMLInputElement>(null);
   const codeInput = useRef<HTMLInputElement>(null);
   const pendingCode = useRef<string | undefined>(undefined);
+  const main = useRef<HTMLElement>(null);
 
   const toast = useCallback((m: string) => {
     setMsg(m);
     setTimeout(() => setMsg(null), 3500);
   }, []);
 
+  // Si la app ya está abierta y se abre el enlace #perfil=…, el navegador no recarga la página:
+  // solo cambia el «#». Por eso también se escucha ese cambio.
+  useEffect(() => {
+    const onHash = () => {
+      if (importFromHash()) {
+        setProfile(loadProfile());
+        setConfigured(true);
+        setView({ name: 'profile' });
+        toast('Perfil cargado');
+      }
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, [toast]);
+
+  // Cada pantalla empieza arriba del todo.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view.name]);
+
   const showResult = (p: Product) => {
     addToHistory(p);
+    setHistVersion((v) => v + 1);
     setView({ name: 'result', product: p });
   };
 
@@ -61,7 +84,7 @@ export default function App() {
       pendingCode.current = code;
       setView({ name: 'form', product: blank(code), note: `El código ${code} no está en Open Food Facts. Haz una foto de la tabla nutricional o escribe los valores; se guardará para la próxima vez.` });
     } else toast(r.message);
-  }, []);
+  }, [toast]);
 
   const readLabel = async (file: File) => {
     setBusy('Preparando el lector…');
@@ -80,7 +103,13 @@ export default function App() {
         text = `${text}\n--- segunda lectura ---\n${text2}`;
       }
       const base = view.name === 'form' ? view.product : blank(pendingCode.current);
-      const merged: Product = { ...base, liquid: base.source === 'openfoodfacts' ? base.liquid : liquid, n: { ...base.n, ...Object.fromEntries(Object.entries(n).filter(([, v]) => v != null)) }, source: base.source === 'openfoodfacts' ? 'openfoodfacts' : 'foto' };
+      const filled = Object.fromEntries(Object.entries(n).filter(([, v]) => v != null));
+      const merged: Product = {
+        ...base,
+        liquid: base.source === 'openfoodfacts' ? base.liquid : liquid,
+        n: { ...base.n, ...filled },
+        source: base.source === 'openfoodfacts' ? 'openfoodfacts' : 'foto',
+      };
       setView({
         name: 'form',
         product: merged,
@@ -107,6 +136,7 @@ export default function App() {
     const c = prompt('Número del código de barras (8 o 13 cifras)');
     const code = c?.replace(/\D/g, '');
     if (code && code.length >= 8) handleCode(code);
+    else if (c != null) toast('El código debe tener al menos 8 cifras');
   };
 
   const submitForm = (p: Product) => {
@@ -116,44 +146,67 @@ export default function App() {
   };
 
   const tab = view.name === 'history' ? 'history' : view.name === 'profile' ? 'profile' : 'scan';
+  const go = (name: 'scan' | 'history' | 'profile') => setView({ name } as View);
 
   return (
     <div className="app">
-      <main>
+      <nav className="nav" aria-label="Secciones">
+        <div className="nav-brand"><img src="./favicon.svg" alt="" />Escáner nutricional</div>
+        <button className={`nav-item ${tab === 'scan' ? 'on' : ''}`} onClick={() => go('scan')}><Barcode size={22} />Escanear</button>
+        <button className={`nav-item ${tab === 'history' ? 'on' : ''}`} onClick={() => go('history')}><HistoryIcon size={22} />Historial</button>
+        <button className={`nav-item ${tab === 'profile' ? 'on' : ''}`} onClick={() => go('profile')}><User size={22} />Perfil</button>
+        <div className="nav-foot">Versión {__APP_VERSION__}</div>
+      </nav>
+
+      <main ref={main}>
         {view.name === 'scan' && (
           <div className="page">
-            <h1>Escanear</h1>
+            <header className="page-head">
+              <div>
+                <h1>Escanear</h1>
+                <p>Escanea un producto y te digo si encaja en tu plan.</p>
+              </div>
+            </header>
             {!configured && (
-              <button className="setup" onClick={() => setView({ name: 'profile' })}>
-                <strong>Primero, tu perfil</strong>
-                <span>Haz una foto a la hoja de tu dietista para cargar tus calorías y macros. Sin eso, la valoración usa valores de ejemplo.</span>
+              <button className="setup" onClick={() => go('profile')}>
+                <strong>Primero, configura tu perfil</strong>
+                <span>Haz una foto a la hoja de tu dietista para cargar tus calorías y macros. Hasta entonces se usan valores de ejemplo.</span>
               </button>
             )}
-            <button className="scan-main" onClick={() => setView({ name: 'camera' })} disabled={!!busy}>
-              <ScanLine size={44} />
-              <strong>Escanear código de barras</strong>
-              <span>Con la cámara</span>
-            </button>
-            <div className="grid">
-              <button className="tile" onClick={() => { pendingCode.current = undefined; labelInput.current?.click(); }} disabled={!!busy}>
-                <Camera size={24} /> Foto de la tabla nutricional
-              </button>
-              <button className="tile" onClick={() => codeInput.current?.click()} disabled={!!busy}>
-                <ImageIcon size={24} /> Foto del código de barras
-              </button>
-              <button className="tile" onClick={askCode} disabled={!!busy}>
-                <Keyboard size={24} /> Escribir el código
-              </button>
-              <button className="tile" onClick={() => setView({ name: 'form', product: blank() })} disabled={!!busy}>
-                <PenLine size={24} /> Valores a mano
-              </button>
+            <div className="cols wide-left">
+              <div className="col">
+                <button className="scan-main" onClick={() => setView({ name: 'camera' })} disabled={!!busy}>
+                  <ScanLine size={42} />
+                  <strong>Escanear código de barras</strong>
+                  <span>Con la cámara</span>
+                </button>
+                <div className="tiles">
+                  <button className="tile" onClick={() => { pendingCode.current = undefined; labelInput.current?.click(); }} disabled={!!busy}>
+                    <Camera size={22} /> Foto de la etiqueta
+                  </button>
+                  <button className="tile" onClick={() => codeInput.current?.click()} disabled={!!busy}>
+                    <ImageIcon size={22} /> Foto del código
+                  </button>
+                  <button className="tile" onClick={askCode} disabled={!!busy}>
+                    <Keyboard size={22} /> Escribir código
+                  </button>
+                  <button className="tile" onClick={() => setView({ name: 'form', product: blank() })} disabled={!!busy}>
+                    <PenLine size={22} /> Valores a mano
+                  </button>
+                </div>
+                {busy && <p className="busy"><Loader2 className="spin" size={18} /> {busy}</p>}
+              </div>
+              <div className="col">
+                <section className="card">
+                  <h2 className="card-title">Últimos productos</h2>
+                  <RecentList key={histVersion} onOpen={(p) => setView({ name: 'result', product: p })} profile={profile} limit={6} />
+                </section>
+              </div>
             </div>
-            {busy && <p className="busy"><Loader2 className="spin" size={18} /> {busy}</p>}
-            <RecentList onOpen={(p) => setView({ name: 'result', product: p })} profile={profile} limit={4} />
           </div>
         )}
 
-        {view.name === 'camera' && <Scanner onCode={handleCode} onClose={() => setView({ name: 'scan' })} />}
+        {view.name === 'camera' && <Scanner onCode={handleCode} onClose={() => go('scan')} />}
 
         {view.name === 'form' && (
           <>
@@ -163,16 +216,11 @@ export default function App() {
               initial={view.product}
               ocrText={view.ocrText}
               note={view.note}
+              busy={!!busy}
+              onPhoto={() => labelInput.current?.click()}
               onSubmit={submitForm}
-              onCancel={() => setView({ name: 'scan' })}
+              onCancel={() => go('scan')}
             />
-            {!view.ocrText && (
-              <div className="page tight">
-                <button className="btn ghost wide" onClick={() => labelInput.current?.click()} disabled={!!busy}>
-                  <Camera size={18} /> Rellenar con una foto de la tabla nutricional
-                </button>
-              </div>
-            )}
           </>
         )}
 
@@ -180,21 +228,31 @@ export default function App() {
           <ResultView
             product={view.product}
             profile={profile}
+            configured={configured}
             onEdit={() => setView({ name: 'form', product: view.product })}
-            onBack={() => setView({ name: 'scan' })}
+            onBack={() => go('scan')}
           />
         )}
 
         {view.name === 'history' && (
-          <div className="page">
-            <h1>Historial</h1>
-            <RecentList onOpen={(p) => setView({ name: 'result', product: p })} profile={profile} deletable />
+          <div className="page narrow">
+            <header className="page-head">
+              <div>
+                <h1>Historial</h1>
+                <p>Valorados con tu perfil actual.</p>
+              </div>
+            </header>
+            <section className="card">
+              <RecentList key={histVersion} onOpen={(p) => setView({ name: 'result', product: p })} profile={profile} deletable />
+            </section>
           </div>
         )}
 
         {view.name === 'profile' && (
           <ProfilePage
+            key={JSON.stringify(profile)}
             profile={profile}
+            configured={configured}
             toast={toast}
             onSaved={(p) => { setProfile(p); setConfigured(true); }}
           />
@@ -204,15 +262,7 @@ export default function App() {
       <input ref={labelInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) readLabel(f); e.target.value = ''; }} />
       <input ref={codeInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) barcodePhoto(f); e.target.value = ''; }} />
 
-      {msg && <div className="toast">{msg}</div>}
-
-      {view.name !== 'camera' && (
-        <nav className="tabs">
-          <button className={tab === 'scan' ? 'on' : ''} onClick={() => setView({ name: 'scan' })}><Barcode size={22} />Escanear</button>
-          <button className={tab === 'history' ? 'on' : ''} onClick={() => setView({ name: 'history' })}><HistoryIcon size={22} />Historial</button>
-          <button className={tab === 'profile' ? 'on' : ''} onClick={() => setView({ name: 'profile' })}><User size={22} />Perfil</button>
-        </nav>
-      )}
+      {msg && <div className="toast" role="status">{msg}</div>}
     </div>
   );
 }
@@ -220,21 +270,20 @@ export default function App() {
 function RecentList({ onOpen, profile, limit, deletable }: { onOpen: (p: Product) => void; profile: Profile; limit?: number; deletable?: boolean }) {
   const [items, setItems] = useState(loadHistory);
   const list = limit ? items.slice(0, limit) : items;
-  if (!list.length) return deletable ? <p className="muted">Aún no has escaneado nada.</p> : null;
+  if (!list.length) return <p className="empty">Aún no has escaneado ningún producto.</p>;
   return (
-    <div className="recent">
-      {limit && <h2 className="section">Últimos productos</h2>}
+    <div className="list">
       {list.map(({ product }) => {
         const v = evaluate(product, profile).verdict;
         return (
-          <div key={(product.code ?? '') + product.name} className="recent-item">
+          <div key={(product.code ?? '') + product.name} className="list-item">
             <button onClick={() => onOpen(product)}>
               <span className={`dot v-${v}`} />
-              <span className="recent-name">{product.name}<small>{product.brand}</small></span>
+              <span className="list-name">{product.name}{product.brand && <small>{product.brand}</small>}</span>
               <span className={`pill v-${v}`}>{VERDICT_TEXT[v]}</span>
             </button>
             {deletable && (
-              <button className="icon" aria-label="Borrar" onClick={() => { removeFromHistory(product); setItems(loadHistory()); }}>
+              <button className="icon-btn" aria-label={`Borrar ${product.name}`} onClick={() => { removeFromHistory(product); setItems(loadHistory()); }}>
                 <Trash2 size={16} />
               </button>
             )}
