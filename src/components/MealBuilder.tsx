@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { History, Search, Trash2 } from 'lucide-react';
 import type { Product } from '../lib/types.ts';
 import { loadHistory } from '../lib/storage.ts';
-import { dayKey, forGrams, itemGrams, mealTotals, pastMeals, type DiaryEntry, type MealItem, type PastMeal } from '../lib/diary.ts';
+import { forGrams, itemGrams, mealTotals, pastMeals, type DiaryEntry, type MealItem, type PastMeal } from '../lib/diary.ts';
 import { fmt, plural } from '../lib/evaluate.ts';
 
 const MEALS = ['Desayuno', 'Media mañana', 'Almuerzo', 'Merienda', 'Cena'];
+/** Comidas en femenino, para escribir «una merienda» / «ninguna cena». */
+const FEM = new Set(['Media mañana', 'Merienda', 'Cena']);
 const num = (s: string) => {
   const t = s.replace(',', '.').trim();
   return t === '' || !isFinite(+t) ? 0 : +t;
@@ -38,18 +40,26 @@ export default function MealBuilder({ initial, onSave, onCancel }: Props) {
   const [items, setItems] = useState<MealItem[]>(initial?.items ?? []);
   const [q, setQ] = useState('');
   const products = useMemo(() => loadHistory().map((h) => h.product), []);
-  const past = useMemo(() => (initial ? [] : pastMeals()), [initial]);
-  // Primero las comidas anteriores del mismo tipo (otro desayuno si estás apuntando el desayuno).
-  const suggestions = useMemo(() => {
-    const same = past.filter((m) => m.name === name);
-    return (same.length ? same : past).slice(0, 4);
-  }, [past, name]);
-
+  const past = useMemo(() => (initial ? [] : pastMeals(300)), [initial]);
+  const [picked, setPicked] = useState('');
   /** Usa los datos actuales del producto (por si se corrigió después de apuntarlo). */
   const fresh = (p: Product): Product => products.find((x) => (p.code && x.code === p.code) || x.name === p.name) ?? p;
+  const options = useMemo(() => {
+    const list = past
+      .filter((m) => m.name === name)
+      .map((m, i) => {
+        const fixed = m.items.map((it) => ({ ...it, product: fresh(it.product) }));
+        const names = [...new Set(fixed.map((it) => it.product.name))].sort((a, b) => a.localeCompare(b, 'es'));
+        return { key: String(i), meal: m, label: `${names.join(' + ')} · ${fmt(mealTotals(fixed).kcal, 0)} kcal` };
+      });
+    // Sin repetir etiquetas idénticas (misma comida apuntada varios días).
+    const seen = new Set<string>();
+    return list.filter((o) => (seen.has(o.label) ? false : (seen.add(o.label), true))).sort((a, b) => a.label.localeCompare(b.label, 'es'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [past, name, products]);
+
   const repeat = (m: PastMeal) => {
     setItems(m.items.map((i) => ({ ...i, product: fresh(i.product) })));
-    if (MEALS.includes(m.name)) setName(m.name);
   };
   const matches = useMemo(() => {
     const t = norm(q.trim());
@@ -74,7 +84,7 @@ export default function MealBuilder({ initial, onSave, onCancel }: Props) {
       <div className="grid-2 meal-head">
         <label className="field">
           <span>Comida</span>
-          <select value={name} onChange={(e) => setName(e.target.value)}>
+          <select value={name} onChange={(e) => { setName(e.target.value); setPicked(''); }}>
             {MEALS.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </label>
@@ -84,17 +94,22 @@ export default function MealBuilder({ initial, onSave, onCancel }: Props) {
         </label>
       </div>
 
-      {!items.length && suggestions.length > 0 && (
-        <div className="past">
-          <span className="picker-hint"><History size={12} style={{ verticalAlign: '-1px' }} /> Repetir una comida anterior</span>
-          {suggestions.map((m) => (
-            <button key={`${m.day}-${m.time}`} className="past-meal" onClick={() => repeat(m)}>
-              <span className="past-top"><b>{m.name}</b><small>{dayLabel(m.day)} · {fmt(mealTotals(m.items.map((i) => ({ ...i, product: fresh(i.product) }))).kcal, 0)} kcal</small></span>
-              <small>{m.items.map((i) => `${i.unit === 'unidad' ? `${fmt(i.qty, 1)} ${i.qty === 1 ? i.product.unitName ?? 'unidad' : plural(i.product.unitName ?? 'unidad')}` : `${fmt(i.qty, 0)} ${i.product.liquid ? 'ml' : 'g'}`} ${i.product.name}`).join(' + ')}</small>
-            </button>
-          ))}
-          <span className="picker-hint">O elige los productos uno a uno</span>
-        </div>
+      {!initial && (
+        <label className="field">
+          <span><History size={12} style={{ verticalAlign: '-1px' }} /> Repetir {name.toLowerCase()} anterior</span>
+          {options.length ? (
+            <select value={picked} onChange={(e) => {
+              setPicked(e.target.value);
+              const o = options.find((x) => x.key === e.target.value);
+              if (o) repeat(o.meal);
+            }}>
+              <option value="">Elige {FEM.has(name) ? 'una' : 'un'} {name.toLowerCase()} que ya hayas apuntado…</option>
+              {options.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+          ) : (
+            <p className="small muted">Aún no has apuntado {FEM.has(name) ? 'ninguna' : 'ningún'} {name.toLowerCase()}. Cuando lo hagas, podrás {FEM.has(name) ? 'repetirla' : 'repetirlo'} desde aquí.</p>
+          )}
+        </label>
       )}
 
       {items.length > 0 && (
@@ -179,13 +194,4 @@ function QtyInput({ label, value, onChange }: { label: string; value: number; on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
   return <input inputMode="decimal" aria-label={label} value={text} onChange={(e) => { setText(e.target.value); onChange(num(e.target.value)); }} />;
-}
-
-function dayLabel(day: string): string {
-  const today = dayKey();
-  const y = new Date();
-  y.setDate(y.getDate() - 1);
-  if (day === today) return 'hoy';
-  if (day === dayKey(y)) return 'ayer';
-  return new Date(day + 'T12:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
 }

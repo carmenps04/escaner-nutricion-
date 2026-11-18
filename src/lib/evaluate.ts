@@ -70,6 +70,9 @@ const clamp = (x: number, a = 0, b = 100) => Math.min(b, Math.max(a, x));
 const lerp = (x: number, x0: number, y0: number, x1: number, y1: number) =>
   y0 + ((clamp(x, Math.min(x0, x1), Math.max(x0, x1)) - x0) * (y1 - y0)) / (x1 - x0);
 
+/** Bebida a efectos de valoración (productos antiguos sin el dato: lo que diga la unidad). */
+export const isDrinkP = (p: Product) => p.drink ?? p.liquid;
+
 export const fmt = (x: number, d = 1) =>
   x.toLocaleString('es-ES', { maximumFractionDigits: d, minimumFractionDigits: 0 });
 
@@ -80,7 +83,8 @@ export function targetProteinDensity(plan: DayPlan): number {
 
 function scores(n: Nutrients, p: Product, plan: DayPlan): Partial<Record<Criterion, number>> {
   const s: Partial<Record<Criterion, number>> = {};
-  const liquid = p.liquid;
+  // Criterios de bebida solo para bebidas; un gazpacho en ml se valora como comida.
+  const liquid = isDrinkP(p);
 
   if (n.prot != null && n.kcal != null && n.kcal >= 10) {
     const pd = (n.prot * 100) / n.kcal;
@@ -145,7 +149,7 @@ export function portion(p: Product, plan: DayPlan, verdict: Verdict, kind: Evalu
     per(n.grasa, plan.grasa * 0.35, 'la grasa: un 35 % de la grasa del día por toma');
     per(n.hc, plan.hc * 0.35, 'los hidratos: un 35 % de los hidratos del día por toma');
     // Con poco azúcar (lactosa del yogur, la fruta…) este tope no se aplica.
-    if ((n.azucar ?? 0) > (p.liquid ? 2.5 : 5)) per(n.azucar, ((plan.kcal * 0.1) / 4) * 0.4, 'el azúcar: el 40 % del máximo diario de azúcar (OMS)');
+    if ((n.azucar ?? 0) > (isDrinkP(p) ? 2.5 : 5)) per(n.azucar, ((plan.kcal * 0.1) / 4) * 0.4, 'el azúcar: el 40 % del máximo diario de azúcar (OMS)');
     per(n.sat, ((plan.kcal * 0.1) / 9) * 0.4, 'la grasa saturada: el 40 % del máximo diario');
   }
   per(n.sal, 1.5, 'la sal: 1,5 g por toma (máximo 5 g al día, OMS)');
@@ -197,14 +201,14 @@ export function evaluate(p: Product, profile: Profile): Evaluation {
 
   // Casos especiales
   let kind: Evaluation['kind'] = 'general';
-  if (n.kcal != null && n.kcal < (p.liquid ? 5 : 15) && (n.azucar ?? 0) < 1) kind = 'sin-calorias';
+  if (n.kcal != null && n.kcal < (isDrinkP(p) ? 5 : 15) && (n.azucar ?? 0) < 1) kind = 'sin-calorias';
   else if ((n.grasa ?? 0) >= 80) kind = 'grasa';
 
   let score: number;
   if (kind === 'sin-calorias') {
     score = 80;
     reasons.push({ tone: 'pos', text: `Casi no aporta calorías (${fmt(n.kcal ?? 0)} kcal por 100 ${u}).` });
-    if (p.liquid) reasons.push({ tone: 'neutral', text: 'Si lleva edulcorantes, la app no los valora: no restan en tu plan, pero conviene que el agua siga siendo la bebida principal.' });
+    if (isDrinkP(p)) reasons.push({ tone: 'neutral', text: 'Si lleva edulcorantes, la app no los valora: no restan en tu plan, pero conviene que el agua siga siendo la bebida principal.' });
   } else if (kind === 'grasa') {
     const olive = (p.categories ?? []).some((c) => c.includes('olive-oil')) || /oliva/i.test(p.name);
     score = olive ? 72 : (n.sat ?? 100) > 30 ? 30 : 50;
@@ -219,10 +223,11 @@ export function evaluate(p: Product, profile: Profile): Evaluation {
     } else score = ws;
     reasons.push(...describe(n, p, plan, s));
     // Bebidas azucaradas y productos que son sobre todo azúcar: como mucho «ocasional».
-    if (p.liquid && (n.azucar ?? 0) > 5) {
+    if (isDrinkP(p) && (n.azucar ?? 0) > 5) {
       score = Math.min(score, 30);
       reasons.unshift({ tone: 'neg', text: 'Bebida azucarada: calorías líquidas que no sacian.' });
-    } else if (!p.liquid && n.kcal && n.azucar != null && (n.azucar * 4) / n.kcal >= 0.5 && p.nova !== 1) {
+    } else if (!isDrinkP(p) && n.kcal && n.azucar != null && n.azucar >= 12.5 && (n.azucar * 4) / n.kcal >= 0.5 && p.nova !== 1) {
+      // Solo con azúcar abundante: en verduras como el tomate casi todas las kcal son azúcar natural, pero son muy pocas.
       score = Math.min(score, 35);
       reasons.unshift({ tone: 'neg', text: 'Más de la mitad de sus calorías vienen del azúcar.' });
     }
@@ -271,10 +276,10 @@ function describe(n: Nutrients, p: Product, plan: DayPlan, s: Partial<Record<Cri
     r.push({ tone: tone(s.prot, 60, 35), text: `Proteína: ${fmt(pd)} g por cada 100 kcal. Tu plan pide de media unos ${fmt(targetProteinDensity(plan))} g, así que ${pd >= targetProteinDensity(plan) ? 'ayuda a llegar a tu proteína' : pd >= targetProteinDensity(plan) * 0.5 ? 'aporta algo, pero menos de lo que necesitas' : 'apenas ayuda a llegar a tu proteína'}.` });
   }
   if (s.densidad != null) {
-    r.push({ tone: tone(s.densidad, 70, 40), text: `Densidad calórica: ${fmt(n.kcal!, 0)} kcal por 100 ${u}${p.liquid ? (n.kcal! > 40 ? ' (las calorías bebidas sacian poco)' : '') : n.kcal! > 400 ? ' (muchas calorías en poco volumen, cuesta controlar la cantidad)' : n.kcal! <= 150 ? ' (sacia con pocas calorías)' : ''}.` });
+    r.push({ tone: tone(s.densidad, 70, 40), text: `Densidad calórica: ${fmt(n.kcal!, 0)} kcal por 100 ${u}${isDrinkP(p) ? (n.kcal! > 40 ? ' (las calorías bebidas sacian poco)' : '') : n.kcal! > 400 ? ' (muchas calorías en poco volumen, cuesta controlar la cantidad)' : n.kcal! <= 150 ? ' (sacia con pocas calorías)' : ''}.` });
   }
-  if (s.azucar != null && (s.azucar < 75 || n.azucar! <= (p.liquid ? 2.5 : 5))) {
-    r.push({ tone: tone(s.azucar), text: n.azucar! <= (p.liquid ? 2.5 : 5) ? `Poco azúcar (${fmt(n.azucar!)} g por 100 ${u}).` : `Azúcar ${s.azucar < 45 ? 'alto' : 'moderado'}: ${fmt(n.azucar!)} g por 100 ${u}.` });
+  if (s.azucar != null && (s.azucar < 75 || n.azucar! <= (isDrinkP(p) ? 2.5 : 5))) {
+    r.push({ tone: tone(s.azucar), text: n.azucar! <= (isDrinkP(p) ? 2.5 : 5) ? `Poco azúcar (${fmt(n.azucar!)} g por 100 ${u}).` : `Azúcar ${s.azucar < 45 ? 'alto' : 'moderado'}: ${fmt(n.azucar!)} g por 100 ${u}.` });
   }
   if (s.fibra != null) r.push({ tone: tone(s.fibra, 70, 45), text: n.fibra! >= 3 ? `Buena fibra (${fmt(n.fibra!)} g por 100 g).` : `Poca fibra para ser un producto de hidratos (${fmt(n.fibra!)} g por 100 g).` });
   if (s.sat != null && s.sat < 75) r.push({ tone: tone(s.sat), text: `Grasa saturada ${s.sat < 45 ? 'alta' : 'moderada'}: ${fmt(n.sat!)} g por 100 ${u}.` });

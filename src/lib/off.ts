@@ -31,6 +31,15 @@ export function isLiquid(cats: string[], quantity?: string | null): boolean {
   return cats.some((c) => LIQUID_CATS.test(c) && !NOT_LIQUID_CATS.test(c));
 }
 
+/** Platos y salsas que pueden venir en ml pero no son bebidas. */
+const FOOD_CATS = /^en:(soups|.*-soups|gazpachos?|salmorejos?|sauces|.*-sauces|tomato-.*|purees|.*-purees|creams|cooking-.*|condiments|oils|.*-oils|vinegars|yogurts|.*-yogurts|desserts|.*-desserts)$/;
+
+/** ¿Se valora como bebida? Solo bebidas de verdad, nunca sopas, salsas, aceites ni yogures. */
+export function isDrink(cats: string[]): boolean {
+  if (cats.some((c) => FOOD_CATS.test(c))) return false;
+  return cats.some((c) => LIQUID_CATS.test(c) && !NOT_LIQUID_CATS.test(c));
+}
+
 export function fromOff(code: string, p: Record<string, any>): Product {
   const nu = p.nutriments ?? {};
   let kcal = v(nu['energy-kcal_100g']);
@@ -56,6 +65,7 @@ export function fromOff(code: string, p: Record<string, any>): Product {
     image: p.image_front_small_url || undefined,
     n,
     liquid,
+    drink: isDrink(cats),
     nova: v(p.nova_group) ?? undefined,
     nutriscore: typeof p.nutriscore_grade === 'string' && /^[a-e]$/.test(p.nutriscore_grade) ? p.nutriscore_grade : undefined,
     unitWeight: unit?.weight,

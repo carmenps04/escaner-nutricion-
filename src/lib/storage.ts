@@ -1,7 +1,7 @@
 // Historial de productos y productos corregidos a mano (todo en el móvil, localStorage).
 
 import type { Product } from './types.ts';
-import { isLiquid } from './off.ts';
+import { isDrink, isLiquid } from './off.ts';
 
 const HIST = 'escaner.historial.v1';
 const CUSTOM = 'escaner.propios.v1';
@@ -31,9 +31,8 @@ function write(key: string, value: unknown): void {
  * Facts los clasifica en «Plant-based foods and beverages». Al leer, se recalcula con la regla actual.
  */
 function fixUnits(p: Product): Product {
-  if (p.source !== 'openfoodfacts' || !p.categories?.length) return p;
-  const liquid = isLiquid(p.categories, p.quantity);
-  return liquid === p.liquid ? p : { ...p, liquid };
+  if (p.source !== 'openfoodfacts' || !p.categories?.length) return p.drink == null ? { ...p, drink: p.liquid } : p;
+  return { ...p, liquid: isLiquid(p.categories, p.quantity), drink: isDrink(p.categories) };
 }
 
 export function loadHistory(): HistoryItem[] {

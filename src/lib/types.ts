@@ -20,7 +20,13 @@ export interface Product {
   image?: string;
   /** Valores por 100 g / 100 ml. */
   n: Nutrients;
+  /** Se mide en ml (unidad de la etiqueta y de las cantidades). */
   liquid: boolean;
+  /**
+   * Es una bebida (leche, zumo, refresco…): se valora con los criterios de bebidas, más estrictos con
+   * el azúcar y la sal. Un gazpacho o un tomate frito pueden ir en ml sin ser bebidas.
+   */
+  drink?: boolean;
   /** Grupo NOVA (1 = sin procesar … 4 = ultraprocesado). */
   nova?: number;
   nutriscore?: string;

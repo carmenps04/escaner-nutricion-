@@ -167,3 +167,23 @@ test('sólido o líquido: la pasta va en gramos y la leche en ml', async () => {
   assert.equal(isLiquid(['en:beverages-and-beverages-preparations', 'en:cocoa-and-chocolate-powders'], undefined), false);
   assert.equal(isLiquid([], '425 g'), false);
 });
+
+test('tomate y gazpacho se valoran como comida, no como bebida', async () => {
+  const { isDrink, isLiquid } = await import('../src/lib/off.ts');
+  const mk = (name: string, v: number[], nova: number, cats: string[], quantity: string): Product => ({
+    name, n: { kcal: v[0], prot: v[1], hc: v[2], azucar: v[3], grasa: v[4], sat: v[5], fibra: v[6], sal: v[7] }, nova, categories: cats, quantity,
+    liquid: isLiquid(cats, quantity), drink: isDrink(cats), source: 'openfoodfacts',
+  });
+  const triturado = mk('Tomate triturado', [25, 1.2, 3.5, 3.5, 0.2, 0, 1.2, 0.3], 3, ['en:plant-based-foods-and-beverages', 'en:canned-tomatoes', 'en:crushed-tomatoes'], '800 g');
+  const frito = mk('Tomate frito', [80, 1.5, 9, 6, 4, 0.5, 1.5, 1.0], 4, ['en:plant-based-foods-and-beverages', 'en:sauces', 'en:tomato-sauces'], '3 x 400 g');
+  const gazpacho = mk('Gazpacho', [40, 0.7, 3, 2.6, 2.8, 0.4, 0.8, 0.6], 3, ['en:plant-based-foods-and-beverages', 'en:beverages', 'en:soups', 'en:gazpachos'], '1 l');
+  // El tomate tiene casi todas sus kcal de azúcar natural, pero muy pocas: no es «sobre todo azúcar».
+  assert.equal(evaluate(triturado, P).verdict, 'buena');
+  assert.notEqual(evaluate(frito, P).verdict, 'ocasional');
+  // El gazpacho va en ml, pero se valora como comida (sopa), no con los criterios de bebidas.
+  assert.equal(gazpacho.liquid, true);
+  assert.equal(gazpacho.drink, false);
+  assert.ok(!evaluate(gazpacho, P).reasons.some((r) => /Bebida azucarada/.test(r.text)));
+  // Un refresco sigue siendo bebida.
+  assert.equal(isDrink(['en:beverages', 'en:sodas', 'en:colas']), true);
+});

@@ -50,6 +50,8 @@ export default function ProductForm({ initial, ocrText, note, busy, onPhoto, onS
       name: name.trim() || 'Producto sin nombre',
       brand: brand.trim() || undefined,
       liquid,
+      // En productos de Open Food Facts se mantiene si es bebida según su categoría.
+      drink: initial.categories?.length && initial.liquid === liquid ? initial.drink : liquid,
       n,
       unitWeight: uw && uw > 0 ? uw : undefined,
       unitName: uw && uw > 0 ? unitName.trim() || 'unidad' : undefined,
