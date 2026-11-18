@@ -54,13 +54,27 @@ export interface Evaluation {
   entreno: Portion;
   warnings: string[];
   kind: 'general' | 'grasa' | 'sin-calorias';
+  /** Nota y peso de cada criterio, para enseñar cómo se ha calculado. */
+  breakdown: { label: string; score: number; weight: number }[];
 }
 
+const CRITERION_LABEL: Record<Criterion, string> = {
+  prot: 'Proteína frente a tu plan',
+  densidad: 'Densidad calórica',
+  azucar: 'Azúcar libre',
+  nova: 'Grado de procesado',
+  fibra: 'Fibra',
+  sat: 'Grasa saturada',
+  sal: 'Sal',
+};
+
 const WEIGHTS: Record<Objetivo, Record<Criterion, number>> = {
-  deficit: { prot: 0.25, azucar: 0.15, sat: 0.1, sal: 0.07, fibra: 0.1, densidad: 0.23, nova: 0.1 },
+  // Déficit: proteína (conservar músculo) y densidad calórica (saciedad) primero; el ultraprocesado
+  // pesa más porque en ensayos controlados hace comer más sin darse cuenta.
+  deficit: { prot: 0.25, azucar: 0.14, sat: 0.08, sal: 0.05, fibra: 0.1, densidad: 0.23, nova: 0.15 },
   mantenimiento: { prot: 0.2, azucar: 0.17, sat: 0.13, sal: 0.1, fibra: 0.12, densidad: 0.13, nova: 0.15 },
   volumen: { prot: 0.3, azucar: 0.13, sat: 0.12, sal: 0.08, fibra: 0.1, densidad: 0.07, nova: 0.2 },
-  recomposicion: { prot: 0.3, azucar: 0.15, sat: 0.1, sal: 0.07, fibra: 0.1, densidad: 0.18, nova: 0.1 },
+  recomposicion: { prot: 0.3, azucar: 0.14, sat: 0.08, sal: 0.05, fibra: 0.1, densidad: 0.18, nova: 0.15 },
 };
 
 type Criterion = 'prot' | 'azucar' | 'sat' | 'sal' | 'fibra' | 'densidad' | 'nova';
@@ -69,6 +83,15 @@ const clamp = (x: number, a = 0, b = 100) => Math.min(b, Math.max(a, x));
 /** Interpolación lineal de y entre (x0,y0) y (x1,y1). */
 const lerp = (x: number, x0: number, y0: number, x1: number, y1: number) =>
   y0 + ((clamp(x, Math.min(x0, x1), Math.max(x0, x1)) - x0) * (y1 - y0)) / (x1 - x0);
+
+/** Zumos, néctares y batidos: su azúcar sí cuenta como azúcar libre (OMS), aunque sean «naturales». */
+const isJuice = (p: Product) => (p.categories ?? []).some((c) => /juice|nectar|smoothie/.test(c)) || /zumo|jugo|n[ée]ctar|smoothie|batido/i.test(p.name);
+
+/**
+ * Azúcar natural de alimentos sin procesar (fruta entera, leche, yogur natural): la OMS no lo cuenta
+ * como azúcar libre, así que no se penaliza ni limita la cantidad.
+ */
+export const naturalSugar = (p: Product) => p.nova === 1 && !isJuice(p);
 
 /** Bebida a efectos de valoración (productos antiguos sin el dato: lo que diga la unidad). */
 export const isDrinkP = (p: Product) => p.drink ?? p.liquid;
@@ -90,7 +113,9 @@ function scores(n: Nutrients, p: Product, plan: DayPlan): Partial<Record<Criteri
     const pd = (n.prot * 100) / n.kcal;
     s.prot = clamp((pd / targetProteinDensity(plan)) * 70);
   }
-  if (n.azucar != null) {
+  // Azúcar natural (fruta entera, leche…): cuenta como cero azúcar libre.
+  if (n.azucar != null && naturalSugar(p)) s.azucar = 100;
+  else if (n.azucar != null) {
     s.azucar = liquid
       ? n.azucar <= 2.5 ? 100 : n.azucar <= 11.25 ? lerp(n.azucar, 2.5, 100, 11.25, 20) : lerp(n.azucar, 11.25, 20, 20, 0)
       : n.azucar <= 5 ? 100 : n.azucar <= 22.5 ? lerp(n.azucar, 5, 100, 22.5, 30) : lerp(n.azucar, 22.5, 30, 45, 0);
@@ -147,9 +172,10 @@ export function portion(p: Product, plan: DayPlan, verdict: Verdict, kind: Evalu
   } else {
     per(n.kcal, plan.kcal * KCAL_SHARE[verdict], `las calorías: hasta un ${Math.round(KCAL_SHARE[verdict] * 100)} % de las del día para un producto ${VERDICT_TEXT[verdict].toLowerCase()}`);
     per(n.grasa, plan.grasa * 0.35, 'la grasa: un 35 % de la grasa del día por toma');
+    per(n.prot, plan.prot * 0.4, 'la proteína: un 40 % de la del día por toma, para repartirla entre las comidas');
     per(n.hc, plan.hc * 0.35, 'los hidratos: un 35 % de los hidratos del día por toma');
     // Con poco azúcar (lactosa del yogur, la fruta…) este tope no se aplica.
-    if ((n.azucar ?? 0) > (isDrinkP(p) ? 2.5 : 5)) per(n.azucar, ((plan.kcal * 0.1) / 4) * 0.4, 'el azúcar: el 40 % del máximo diario de azúcar (OMS)');
+    if (!naturalSugar(p) && (n.azucar ?? 0) > (isDrinkP(p) ? 2.5 : 5)) per(n.azucar, ((plan.kcal * 0.1) / 4) * 0.4, 'el azúcar: el 40 % del máximo diario de azúcar (OMS)');
     per(n.sat, ((plan.kcal * 0.1) / 9) * 0.4, 'la grasa saturada: el 40 % del máximo diario');
   }
   per(n.sal, 1.5, 'la sal: 1,5 g por toma (máximo 5 g al día, OMS)');
@@ -205,6 +231,7 @@ export function evaluate(p: Product, profile: Profile): Evaluation {
   else if ((n.grasa ?? 0) >= 80) kind = 'grasa';
 
   let score: number;
+  let breakdown: Evaluation['breakdown'] = [];
   if (kind === 'sin-calorias') {
     score = 80;
     reasons.push({ tone: 'pos', text: `Casi no aporta calorías (${fmt(n.kcal ?? 0)} kcal por 100 ${u}).` });
@@ -217,6 +244,11 @@ export function evaluate(p: Product, profile: Profile): Evaluation {
   } else {
     const s = scores(n, p, plan);
     const ws = weightedScore(s, profile.objetivo);
+    const w = WEIGHTS[profile.objetivo];
+    const tw = (Object.keys(s) as Criterion[]).reduce((a, k) => a + w[k], 0);
+    breakdown = (Object.keys(s) as Criterion[])
+      .map((k) => ({ label: CRITERION_LABEL[k], score: Math.round(s[k]!), weight: Math.round((w[k] / tw) * 100) }))
+      .sort((a, b) => b.weight - a.weight);
     if (ws == null) {
       score = 50;
       warnings.push('Hay muy pocos datos para valorar el producto.');
@@ -249,7 +281,7 @@ export function evaluate(p: Product, profile: Profile): Evaluation {
     else if (fatShare >= 0.5) { macroKind = 'grasa'; timing = 'Es sobre todo grasa: mejor lejos del entreno y sin juntarlo con otras grasas en la misma comida.'; }
   }
 
-  return { score: Math.round(score), verdict, reasons, frequency: frequency(verdict, score, macroKind === 'hc', kind), timing, macroKind, descanso, entreno, warnings, kind };
+  return { score: Math.round(score), verdict, reasons, frequency: frequency(verdict, score, macroKind === 'hc', kind), timing, macroKind, descanso, entreno, warnings, kind, breakdown };
 }
 
 function frequency(v: Verdict, score: number, carbHeavy: boolean, kind: Evaluation['kind']): string {

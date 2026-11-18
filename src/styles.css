@@ -388,3 +388,16 @@ input[type='date']::-webkit-date-and-time-value, input[type='time']::-webkit-dat
   .portion small { grid-column: 1 / -1; }
   .portion.other strong { font-size: 16px; }
 }
+
+/* Cómo se ha calculado */
+details.how { gap: 10px; }
+details.how > summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+details.how > summary::-webkit-details-marker { display: none; }
+details.how > summary::after { content: ''; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); margin-right: 4px; transition: transform 0.15s; }
+details.how[open] > summary::after { transform: rotate(-135deg); }
+details.how:not([open]) { gap: 0; }
+.how-table td:nth-child(2), .how-table td:last-child { white-space: nowrap; }
+.how-table td:nth-child(2) { color: var(--muted); }
+.how-bar { display: inline-block; width: 48px; height: 6px; border-radius: 999px; background: var(--surface-2); margin-right: 8px; vertical-align: middle; overflow: hidden; }
+.how-bar span { display: block; height: 100%; border-radius: inherit; }
+.how-bar .g { background: var(--good-dot); } .how-bar .m { background: var(--mid-dot); } .how-bar .b { background: var(--bad-dot); }

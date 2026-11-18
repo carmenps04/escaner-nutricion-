@@ -187,3 +187,22 @@ test('tomate y gazpacho se valoran como comida, no como bebida', async () => {
   // Un refresco sigue siendo bebida.
   assert.equal(isDrink(['en:beverages', 'en:sodas', 'en:colas']), true);
 });
+
+test('azúcar natural de fruta y leche no limita la cantidad; el del zumo sí', () => {
+  const platano: Product = { name: 'Plátano', n: { kcal: 94, prot: 1.2, hc: 20, azucar: 17, grasa: 0.3, sat: 0.1, fibra: 2.6, sal: 0 }, liquid: false, nova: 1, unitWeight: 120, unitName: 'plátano', source: 'manual' };
+  const zumo: Product = { name: 'Zumo de naranja', n: { kcal: 45, prot: 0.7, hc: 10, azucar: 10, grasa: 0.1, sat: 0, fibra: 0.2, sal: 0 }, liquid: true, drink: true, nova: 1, source: 'manual' };
+  const e = evaluate(platano, P);
+  assert.equal(e.verdict, 'buena');
+  assert.ok((e.descanso.units ?? 0) >= 1);
+  assert.doesNotMatch(e.descanso.limitedBy, /azúcar/);
+  assert.match(evaluate(zumo, P).descanso.limitedBy, /azúcar/);
+});
+
+test('la proteína se reparte: como mucho un 40 % de la del día por toma', () => {
+  const pollo: Product = { name: 'Pechuga de pollo', n: { kcal: 110, prot: 23, hc: 0, azucar: 0, grasa: 1.8, sat: 0.5, fibra: 0, sal: 0.2 }, liquid: false, nova: 1, source: 'manual' };
+  const e = evaluate(pollo, P);
+  assert.match(e.descanso.limitedBy, /proteína/);
+  assert.ok(e.descanso.prot! <= P.descanso.prot * 0.4 + 0.5);
+  const total = e.breakdown.reduce((a, b) => a + b.weight, 0);
+  assert.ok(total >= 98 && total <= 102, `pesos ${total}`);
+});

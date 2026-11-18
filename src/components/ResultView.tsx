@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { AlertTriangle, CheckCircle2, Clock, Dumbbell, Info, MinusCircle, Pencil, Sofa, XCircle } from 'lucide-react';
 import type { Product } from '../lib/types.ts';
-import type { Profile } from '../lib/profile.ts';
-import { evaluate, fmt, plural, portionText, VERDICT_TEXT, type Portion } from '../lib/evaluate.ts';
+import { OBJETIVOS, type Profile } from '../lib/profile.ts';
+import { evaluate, fmt, plural, portionText, targetProteinDensity, VERDICT_TEXT, type Portion } from '../lib/evaluate.ts';
 import { timingAdvice, type Today } from '../lib/training.ts';
 import TodayChip from './TodayChip.tsx';
 import Alternatives from './Alternatives.tsx';
@@ -124,6 +124,32 @@ export default function ResultView({ product, profile, configured, hoy, onTodayC
               {e.reasons.map((r) => <li key={r.text} className={`r-${r.tone}`}>{r.text}</li>)}
             </ul>
           </section>
+          <details className="card how">
+            <summary className="card-title">Cómo se ha calculado</summary>
+            <p className="small">
+              Con tu plan del dietista: <b>{fmt(profile.descanso.kcal, 0)} kcal</b> sin entreno y <b>{fmt(profile.entreno.kcal, 0)} kcal</b> con entreno, y tu objetivo: {OBJETIVOS[profile.objetivo].toLowerCase()}.
+              La proteína de referencia es <b>{fmt(targetProteinDensity(profile.descanso))} g por cada 100 kcal</b>, que sale de los {fmt(profile.descanso.prot, 0)} g de proteína de tu plan.
+            </p>
+            {e.breakdown.length > 0 && (
+              <table className="table how-table">
+                <thead><tr><th>Criterio</th><th>Peso</th><th>Nota</th></tr></thead>
+                <tbody>
+                  {e.breakdown.map((b) => (
+                    <tr key={b.label}>
+                      <td>{b.label}</td>
+                      <td>{b.weight} %</td>
+                      <td><span className="how-bar"><span style={{ width: `${b.score}%` }} className={b.score >= 75 ? 'g' : b.score >= 45 ? 'm' : 'b'} /></span>{b.score}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <p className="small muted">
+              La puntuación es la media ponderada de las notas: buena opción desde 65, regular de 40 a 64 y ocasional por debajo de 40.
+              La cantidad máxima es el tope más bajo entre calorías, grasa, hidratos, proteína, azúcar libre, grasa saturada y sal, calculados sobre tu plan de cada tipo de día.
+              Tu peso y tu composición corporal no entran directamente: el dietista ya los ha convertido en las calorías y macros de tu plan, y la app usa esos números.
+            </p>
+          </details>
           <section className="card">
             <h2 className="card-title">Valores nutricionales</h2>
             <table className="table">
