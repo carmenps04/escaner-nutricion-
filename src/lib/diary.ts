@@ -154,3 +154,21 @@ export function pastMeals(limit = 20): PastMeal[] {
   }
   return out;
 }
+
+export type KcalLevel = 'ok' | 'alto' | 'malo';
+
+/**
+ * Cómo de grave es pasarse de calorías. El plan lleva un déficit (mantenimiento − plan); pasarse se come
+ * parte de ese déficit:
+ * - hasta un 2 % por encima: en el objetivo;
+ * - hasta perder la mitad del déficit del día: naranja (sigues en déficit, afecta poco);
+ * - más de la mitad del déficit, o por encima del mantenimiento: rojo.
+ * Sin datos de gasto (o sin déficit en el plan), el rojo empieza al pasar un 10 % del plan.
+ */
+export function kcalLevel(kcal: number, planKcal: number, maintenance: number): { level: KcalLevel; redFrom: number; sinDeficit: boolean } {
+  const deficit = maintenance - planKcal;
+  const redFrom = Math.round(deficit >= 100 ? planKcal + deficit / 2 : planKcal * 1.1);
+  const sinDeficit = deficit >= 100 && kcal > maintenance;
+  const level: KcalLevel = kcal <= planKcal * 1.02 ? 'ok' : kcal <= redFrom ? 'alto' : 'malo';
+  return { level, redFrom, sinDeficit };
+}

@@ -194,3 +194,18 @@ test('alternativas: si falla la segunda búsqueda, usa lo ya encontrado', async 
     assert.equal(r.items[0]?.product.code, '2');
   });
 });
+
+// ── Calorías: naranja y rojo según el déficit ─────────────────────
+import { kcalLevel } from '../src/lib/diary.ts';
+
+test('kcal: naranja si sigues en déficit, rojo si pierdes más de la mitad', () => {
+  // Día sin entreno: plan 1554, mantenimiento 1943 → déficit 389, rojo desde 1749.
+  assert.equal(kcalLevel(1560, 1554, 1943).level, 'ok');
+  assert.equal(kcalLevel(1693, 1554, 1943).level, 'alto');
+  assert.equal(kcalLevel(1554, 1554, 1943).redFrom, 1749);
+  assert.equal(kcalLevel(1800, 1554, 1943).level, 'malo');
+  assert.equal(kcalLevel(2000, 1554, 1943).sinDeficit, true);
+  // Sin datos de gasto: rojo desde +10 %.
+  assert.equal(kcalLevel(1650, 1500, 0).level, 'alto');
+  assert.equal(kcalLevel(1660, 1500, 0).level, 'malo');
+});

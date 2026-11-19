@@ -4,7 +4,7 @@ import MealBuilder from './MealBuilder.tsx';
 import type { Profile } from '../lib/profile.ts';
 import type { Product } from '../lib/types.ts';
 import { dowOf, type Today } from '../lib/training.ts';
-import { addEntry, dayKey, itemGrams, loadDay, remaining, removeEntry, totals, updateEntry, forGrams, type DiaryEntry, type Totals } from '../lib/diary.ts';
+import { addEntry, dayKey, itemGrams, loadDay, remaining, removeEntry, totals, updateEntry, forGrams, type DiaryEntry, type Totals, kcalLevel, type KcalLevel } from '../lib/diary.ts';
 import { fmt, plural } from '../lib/evaluate.ts';
 import { loadPlan, mealTarget } from '../lib/plan.ts';
 import { useDraft, VsPlan } from './MealBuilder.tsx';
@@ -32,6 +32,7 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
   // Hoy manda el ajuste del día; otros días, la semana del perfil.
   const entreno = isToday ? hoy.entreno : (profile.semana ?? []).some((t) => t.dow === dowOf(date));
   const plan = entreno ? profile.entreno : profile.descanso;
+  const maintenance = (profile.gmtNeat ?? 0) + (entreno ? profile.gastoEntreno ?? 0 : 0);
   // Comida que se está añadiendo o editando: el resumen enseña cómo quedaría el día con ella.
   const [draft, setDraft] = useState<{ replaces?: string; t: Totals } | null>(null);
   const onDraft = (replaces?: string) => (d: Totals | null) => setDraft(d && d.kcal > 0 ? { replaces, t: d } : null);
@@ -39,6 +40,8 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
   const before = draft?.replaces ? totals(entries.filter((e) => e.id !== draft.replaces)) : saved;
   const t = draft ? sum(before, draft.t) : saved;
   const left = remaining(plan, t);
+  const kl = kcalLevel(t.kcal, plan.kcal, maintenance);
+  const kcalTone = (v: number) => toneOf(kcalLevel(v, plan.kcal, maintenance).level);
   const summary = useRef<HTMLElement>(null);
   const [summaryVisible, setSummaryVisible] = useState(true);
   useEffect(() => {
@@ -82,11 +85,20 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
           <div>
             <strong>{fmt(t.kcal, 0)}</strong> <span>/ {fmt(plan.kcal, 0)} kcal</span>
           </div>
-          <span className={tooMuch(t.kcal, plan.kcal, TOL.kcal) ? 'over' : 'muted'}>
-            {left.kcal >= 0 ? `Te quedan ${fmt(left.kcal, 0)} kcal` : `Te has pasado ${fmt(-left.kcal, 0)} kcal`}
+          <span className={kl.level === 'malo' ? 'over' : kl.level === 'alto' ? 'warn-text' : 'muted'}>
+            {left.kcal >= 0 ? `Te quedan ${fmt(left.kcal, 0)} kcal` : kl.level === 'ok' ? 'En tu objetivo' : `Te has pasado ${fmt(-left.kcal, 0)} kcal`}
           </span>
         </div>
-        <Bar value={t.kcal} before={before.kcal} max={plan.kcal} big tol={TOL.kcal} />
+        <Bar value={t.kcal} before={before.kcal} max={plan.kcal} big tone={kcalTone} />
+        {kl.level !== 'ok' && (
+          <p className={`kcal-note ${kl.level === 'malo' ? 'over' : 'warn-text'}`}>
+            {kl.level === 'alto'
+              ? `Sigues en déficit: afecta poco. Sería malo a partir de ${fmt(kl.redFrom, 0)} kcal.`
+              : kl.sinDeficit
+                ? 'Has comido más de lo que gastas hoy: no hay déficit.'
+                : `Pasas de ${fmt(kl.redFrom, 0)} kcal: pierdes más de la mitad del déficit de hoy.`}
+          </p>
+        )}
         {draft && <p className="preview-note">Con la comida que estás añadiendo (+{fmt(t.kcal - before.kcal, 0)} kcal). Aún no está guardada.</p>}
         <div className="macros">
           <Macro previewing={!!draft} label="Proteína" value={t.prot} before={before.prot} max={plan.prot} goal="reach" />
@@ -95,7 +107,7 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
         </div>
       </section>
 
-      {draft && !summaryVisible && <DraftStrip t={t} before={before} plan={plan} />}
+      {draft && !summaryVisible && <DraftStrip t={t} before={before} plan={plan} tone={kcalTone} />}
 
       <section className="card">
         <h2 className="card-title">Comidas</h2>
@@ -127,20 +139,25 @@ const sum = (a: Totals, b: Totals): Totals => ({ kcal: a.kcal + b.kcal, prot: a.
 /** Barra de progreso; si hay comida en preparación, la parte nueva va en otro tono. */
 /**
  * Cuándo algo sale en rojo: solo si es malo para el objetivo. Pasarse de proteína no se marca (es lo que
- * hay que alcanzar en déficit); hidratos y grasa, solo si se pasan más de un 5 % (las calorías, un 2 %).
+ * hay que alcanzar en déficit); hidratos y grasa, solo si se pasan más de un 5 %. Las calorías van aparte (kcalLevel).
  */
-const TOL = { macro: 0.05, kcal: 0.02 };
+const TOL = { macro: 0.05 };
 const tooMuch = (value: number, max: number, tol: number) => max > 0 && value > max * (1 + tol);
 
-function Bar({ value, before = value, max, big, reach, tol = TOL.macro }: { value: number; before?: number; max: number; big?: boolean; reach?: boolean; tol?: number }) {
+const toneOf = (l: KcalLevel) => (l === 'malo' ? 'over' : l === 'alto' ? 'warn' : '');
+
+/** tone: color de la barra según el valor ('' verde, 'warn' naranja, 'over' rojo). */
+function Bar({ value, before = value, max, big, reach, tone }: { value: number; before?: number; max: number; big?: boolean; reach?: boolean; tone?: (v: number) => string }) {
   const pct = (x: number) => (max > 0 ? Math.max(0, Math.min(100, (x / max) * 100)) : 0);
   const base = pct(Math.min(before, value));
   const add = pct(value) - base;
-  const bad = (v: number) => !reach && tooMuch(v, max, tol);
+  const cls = tone ?? ((v: number) => (!reach && tooMuch(v, max, TOL.macro) ? 'over' : ''));
+  // La barra entera toma el color de cómo queda el día (también la parte ya comida).
+  const c = cls(value);
   return (
     <div className={`bar ${big ? 'big' : ''}`} aria-hidden>
-      <span style={{ width: `${base}%` }} className={bad(before) ? 'over' : ''} />
-      {add > 0 && <span style={{ width: `${add}%` }} className={`add ${bad(value) ? 'over' : ''}`} />}
+      <span style={{ width: `${base}%` }} className={c} />
+      {add > 0 && <span style={{ width: `${add}%` }} className={`add ${c}`} />}
     </div>
   );
 }
@@ -163,7 +180,7 @@ function Macro({ label, value, before = value, max, goal, previewing }: { label:
 }
 
 /** Resumen fijo arriba mientras se añade una comida y el resumen del día no se ve. */
-function DraftStrip({ t, before, plan }: { t: Totals; before: Totals; plan: { kcal: number; prot: number; hc: number; grasa: number } }) {
+function DraftStrip({ t, before, plan, tone }: { t: Totals; before: Totals; plan: { kcal: number; prot: number; hc: number; grasa: number }; tone: (v: number) => string }) {
   const items: [string, number, number][] = [
     ['Prot.', t.prot, plan.prot],
     ['HC', t.hc, plan.hc],
@@ -174,9 +191,9 @@ function DraftStrip({ t, before, plan }: { t: Totals; before: Totals; plan: { kc
       <div className="draft-inner">
         <div className="draft-kcal">
           <span>Con esta comida</span>
-          <b className={tooMuch(t.kcal, plan.kcal, TOL.kcal) ? 'over' : ''}>{fmt(t.kcal, 0)}</b> / {fmt(plan.kcal, 0)} kcal
+          <b className={tone(t.kcal) === 'over' ? 'over' : tone(t.kcal) === 'warn' ? 'warn-text' : ''}>{fmt(t.kcal, 0)}</b> / {fmt(plan.kcal, 0)} kcal
         </div>
-        <Bar value={t.kcal} before={before.kcal} max={plan.kcal} tol={TOL.kcal} />
+        <Bar value={t.kcal} before={before.kcal} max={plan.kcal} tone={tone} />
         <div className="draft-macros">
           {items.map(([l, v, m]) => (
             <span key={l} className={l !== 'Prot.' && tooMuch(v, m, TOL.macro) ? 'over' : ''}><small>{l}</small> <b>{fmt(v, 0)}</b>/{fmt(m, 0)}</span>

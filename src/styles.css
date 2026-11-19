@@ -17,6 +17,8 @@
   --mid: #fcf0c8;
   --mid-ink: #6f4f00;
   --mid-dot: #dcb547;
+  --warn-dot: #ec9440;
+  --warn-ink: #9a4d08;
   --bad: #fbe0dc;
   --bad-ink: #962c24;
   --bad-dot: #db6b5f;
@@ -505,3 +507,8 @@ details.how:not([open]) { gap: 0; }
 .account-state.over { color: var(--bad-ink); }
 .account-state svg { flex: 0 0 auto; }
 .ok-text { color: var(--accent-ink); font-weight: 600; }
+.bar span.warn { background: var(--warn-dot); }
+.bar span.add.warn { background-color: var(--warn-dot); }
+.warn-text { color: var(--warn-ink); font-weight: 600; }
+.kcal-note { margin: 8px 0 0; font-size: 13px; }
+.kcal-note.warn-text, .kcal-note.over { font-weight: 500; }
