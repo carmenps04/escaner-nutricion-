@@ -21,4 +21,9 @@ npm test        # lógica y lectores
 npm run dev
 ```
 
-Cada push a `main` compila y publica en GitHub Pages (`.github/workflows/pages.yml`).
+Cada push a `main` pasa los tests, compila y publica (`.github/workflows/pages.yml`):
+
+- **Firebase Hosting** (`https://escaner-nutricion.web.app`): dirección propia con cabeceras de seguridad (CSP, HSTS, etc., en `firebase.json`). Necesita el secreto `FIREBASE_SERVICE_ACCOUNT` (cuenta de servicio con los roles *Administrador de Firebase Hosting* y *Visor de claves de API*).
+- **GitHub Pages** (dirección antigua): con `MUDANZA_PAGES: 'true'` solo muestra el aviso de mudanza (`VITE_MUDANZA=1`), que ayuda a llevarse los datos y a borrarlos de allí.
+
+Reglas de Firestore: `firestore.rules`.

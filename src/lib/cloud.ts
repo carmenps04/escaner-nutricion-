@@ -101,8 +101,11 @@ export function initCloud(): void {
 const notify = () => window.dispatchEvent(new Event('escaner-sync'));
 
 let seq = 0;
+/** Mientras se cierra sesión borrando el dispositivo: no se vuelve a enlazar ni a escribir nada. */
+let blocked = false;
 async function onUser(u: User | null) {
   const my = ++seq;
+  if (blocked) return;
   session?.unsub.forEach((f) => f());
   session = null;
   if (!u) {
@@ -113,7 +116,7 @@ async function onUser(u: User | null) {
   try {
     const fs = await import('firebase/firestore');
     const { getApps } = await import('firebase/app');
-    if (my !== seq) return; // llegó otro cambio de sesión mientras tanto
+    if (my !== seq || blocked) return; // llegó otro cambio de sesión mientras tanto
     const db = fs.getFirestore(getApps()[0]);
     session = { uid: u.uid, user: u, db, fs, unsub: [], linked: false };
     await connect();
@@ -155,6 +158,7 @@ async function link(u: User, fromServer = false) {
   const remote: Record<string, { v: string; t: number }> = {};
   a.forEach((d) => { remote[d.id] = d.data() as { v: string; t: number }; });
   b.forEach((d) => { remote[`diario/${d.id}`] = d.data() as { v: string; t: number }; });
+  if (blocked) return;
   const local = readUnits(raw);
   const firstTime = m.uid !== u.uid;
 
@@ -290,6 +294,7 @@ async function wipeDevice(): Promise<void> {
  * wipeLocal se borran también de aquí (para un ordenador o móvil prestado).
  */
 export async function signOut(wipeLocal = false): Promise<void> {
+  if (wipeLocal) blocked = true;
   const { auth, mod } = await loadAuth();
   // Se deja de escuchar antes: si no, un cambio que llegue mientras tanto volvería a escribir datos.
   session?.unsub.forEach((f) => f());

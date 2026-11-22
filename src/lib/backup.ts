@@ -88,8 +88,16 @@ const fromB64 = (s: string) => decodeURIComponent(escape(atob(s.replace(/-/g, '+
  * Enlace con todos los datos, cifrados con la contraseña, tras «#datos=». Lo que va tras «#» no se
  * envía a ningún servidor al abrirlo, pero el enlace queda guardado donde se pegue: por eso va cifrado.
  */
-export async function backupLink(pass: string): Promise<string> {
-  return `${location.origin}${location.pathname}#datos=${toB64(JSON.stringify(await encryptBackup(makeBackup(), pass)))}`;
+export async function backupLink(pass: string, base = `${location.origin}${location.pathname}`): Promise<string> {
+  return `${base}#datos=${toB64(JSON.stringify(await encryptBackup(makeBackup(), pass)))}`;
+}
+
+/** Dirección de la app desde la mudanza a Firebase Hosting (origen propio, con cabeceras de seguridad). */
+export const APP_URL = 'https://escaner-nutricion.web.app/';
+
+/** ¿Hay datos de la app en este navegador? */
+export function hasLocalData(): boolean {
+  try { return KEYS.some((k) => k !== 'escaner.orden' && localStorage.getItem(k) != null); } catch { return false; }
 }
 
 export interface ImportSummary {

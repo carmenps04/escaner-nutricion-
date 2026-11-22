@@ -71,17 +71,10 @@ export default function DataCard({ toast, pending, onPendingDone }: Props) {
         await downloadBackup(pass);
         toast('Copia cifrada descargada');
       } else {
-        const link = backupLink(pass);
-        try {
-          // Safari solo deja copiar durante el toque: se le pasa la promesa en vez de esperar al cifrado.
-          if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
-            await navigator.clipboard.write([new ClipboardItem({ 'text/plain': link.then((l) => new Blob([l], { type: 'text/plain' })) })]);
-          } else {
-            await navigator.clipboard.writeText(await link);
-          }
-          toast('Datos cifrados copiados. Ábrela desde el otro sitio, pulsa «Pegar datos» y escribe la contraseña.');
-        } catch {
-          setText(await link);
+        const r = await copyLink(backupLink(pass));
+        if (r.copied) toast('Datos cifrados copiados. Ábrela desde el otro sitio, pulsa «Pegar datos» y escribe la contraseña.');
+        else {
+          setText(r.link);
           toast('No se ha podido copiar solo: selecciona el texto del cuadro y cópialo.');
         }
       }
@@ -130,7 +123,7 @@ export default function DataCard({ toast, pending, onPendingDone }: Props) {
 
       <label className="field">
         <span>O pega aquí el código</span>
-        <textarea rows={2} value={text} onChange={(e) => { setText(e.target.value); setError(null); setCandidate(null); setLocked(null); }} placeholder="https://carmenps04.github.io/…#datos=…" />
+        <textarea rows={2} value={text} onChange={(e) => { setText(e.target.value); setError(null); setCandidate(null); setLocked(null); }} placeholder="https://escaner-nutricion.web.app/#datos=…" />
       </label>
       {text && !candidate && !locked && <button className="btn primary small-btn data-load" onClick={() => tryParse(text)}>Cargar</button>}
       {error && !locked && <p className="small over">{error}</p>}
@@ -166,8 +159,25 @@ export default function DataCard({ toast, pending, onPendingDone }: Props) {
   );
 }
 
+/**
+ * Copia el enlace al portapapeles. Safari solo deja copiar durante el toque: se le pasa la promesa del
+ * cifrado en vez de esperarla. Si no se puede, devuelve el enlace para enseñarlo y copiarlo a mano.
+ */
+export async function copyLink(link: Promise<string>): Promise<{ copied: boolean; link: string }> {
+  try {
+    if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': link.then((l) => new Blob([l], { type: 'text/plain' })) })]);
+    } else {
+      await navigator.clipboard.writeText(await link);
+    }
+    return { copied: true, link: await link };
+  } catch {
+    return { copied: false, link: await link };
+  }
+}
+
 /** Contraseña para cifrar la copia (dos veces, para no equivocarse). */
-function ExportForm({ kind, busy, onSubmit, onCancel }: { kind: 'copy' | 'download'; busy: boolean; onSubmit: (pass: string) => void; onCancel: () => void }) {
+export function ExportForm({ kind, busy, onSubmit, onCancel }: { kind: 'copy' | 'download'; busy: boolean; onSubmit: (pass: string) => void; onCancel: () => void }) {
   const [a, setA] = useState('');
   const [b, setB] = useState('');
   const short = a.length > 0 && a.length < MIN_PASS;

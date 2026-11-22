@@ -4,16 +4,22 @@ import { defineConfig } from 'vite';
 import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
+/** Versión para la dirección antigua (GitHub Pages): solo la pantalla de mudanza. */
+const MUDANZA = process.env.VITE_MUDANZA === '1';
+
 /**
  * Copia el lector de texto (OCR) a dist/ocr al compilar, igual que en la app del gimnasio: la lectura
  * de fotos se hace dentro del móvil, sin servidores externos ni claves de API.
  */
 function ocrAssets(): Plugin {
+  let outDir = 'dist';
   return {
     name: 'ocr-assets',
     apply: 'build',
+    configResolved(c) { outDir = c.build.outDir; },
     closeBundle() {
-      const out = 'dist/ocr';
+      if (MUDANZA) return; // la pantalla de mudanza no lee fotos
+      const out = `${outDir}/ocr`;
       mkdirSync(out, { recursive: true });
       cpSync('node_modules/tesseract.js/dist/worker.min.js', `${out}/worker.min.js`);
       for (const f of readdirSync('node_modules/tesseract.js-core')) {
@@ -29,22 +35,25 @@ function ocrAssets(): Plugin {
  * Cada despliegue cambia la versión, así el móvil descarta la caché anterior.
  */
 function serviceWorker(): Plugin {
+  let outDir = 'dist';
   return {
     name: 'service-worker',
     apply: 'build',
+    configResolved(c) { outDir = c.build.outDir; },
     closeBundle() {
+      if (MUDANZA) return; // la pantalla de mudanza no se usa sin conexión
       const files: string[] = [];
       const walk = (dir: string) => {
         for (const f of readdirSync(dir)) {
           const full = join(dir, f);
           if (statSync(full).isDirectory()) { if (f !== 'ocr') walk(full); }
-          else files.push('./' + full.slice('dist/'.length));
+          else files.push('./' + full.slice(outDir.length + 1).replace(/\\/g, '/'));
         }
       };
-      walk('dist');
+      walk(outDir);
       const version = Date.now().toString(36);
       const tpl = readFileSync('src/sw-template.js', 'utf8');
-      writeFileSync('dist/sw.js', tpl.replace('__VERSION__', version).replace('__PRECACHE__', JSON.stringify(['./', ...files.filter((f) => f !== './sw.js')])));
+      writeFileSync(`${outDir}/sw.js`, tpl.replace('__VERSION__', version).replace('__PRECACHE__', JSON.stringify(['./', ...files.filter((f) => f !== './sw.js')])));
     },
   };
 }

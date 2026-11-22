@@ -1,4 +1,7 @@
 name: Publicar en GitHub Pages
+# Publica la app en Firebase Hosting (https://escaner-nutricion.web.app, su dirección propia) y en
+# GitHub Pages (la dirección antigua). Con MUDANZA_PAGES a 'true', GitHub Pages solo muestra el aviso
+# de mudanza.
 
 on:
   push:
@@ -16,9 +19,15 @@ concurrency:
   group: pages-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
   cancel-in-progress: true
 
+env:
+  MUDANZA_PAGES: 'false'
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Solo se publica en Firebase si existe la clave de la cuenta de servicio (secreto del repositorio).
+      HAS_FIREBASE_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,10 +37,22 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Publicar en Firebase Hosting
+        if: github.event_name == 'push' && env.HAS_FIREBASE_KEY == 'true'
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          umask 077
+          printf '%s' "$FIREBASE_KEY" > "$RUNNER_TEMP/clave.json"
+          GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/clave.json" npx --yes firebase-tools@15.37.0 deploy --only hosting --project escaner-nutricion --non-interactive
+          rm -f "$RUNNER_TEMP/clave.json"
+      - name: Aviso de mudanza para la dirección antigua
+        if: github.event_name != 'pull_request' && env.MUDANZA_PAGES == 'true'
+        run: VITE_MUDANZA=1 npx vite build --outDir dist-pages --emptyOutDir
       - if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: ${{ env.MUDANZA_PAGES == 'true' && 'dist-pages' || 'dist' }}
 
   deploy:
     if: github.event_name != 'pull_request'
