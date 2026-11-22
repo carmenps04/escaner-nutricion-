@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { initCloud } from './lib/cloud.ts';
-import { BarChart3, Barcode, Camera, History as HistoryIcon, Keyboard, Loader2, NotebookPen, PenLine, ScanLine, Trash2, User, WifiOff, Image as ImageIcon } from 'lucide-react';
+import { BarChart3, Barcode, Search, Camera, History as HistoryIcon, Keyboard, Loader2, NotebookPen, PenLine, ScanLine, Trash2, User, WifiOff, Image as ImageIcon } from 'lucide-react';
 import Scanner, { decodeBarcodePhoto } from './components/Scanner.tsx';
 import ProductForm from './components/ProductForm.tsx';
 import ResultView from './components/ResultView.tsx';
@@ -18,13 +18,15 @@ import TodayChip from './components/TodayChip.tsx';
 import DiaryPage from './components/DiaryPage.tsx';
 import CompareView from './components/CompareView.tsx';
 import ResumenPage from './components/ResumenPage.tsx';
+import SearchPage from './components/SearchPage.tsx';
 import { refreshSummaries } from './lib/resumen.ts';
 
 type View =
   | { name: 'scan' }
   | { name: 'camera' }
   | { name: 'form'; product: Product; ocrText?: string; note?: string }
-  | { name: 'result'; product: Product }
+  | { name: 'result'; product: Product; from?: 'search' }
+  | { name: 'search' }
   | { name: 'compare'; a: Product; b: Product }
   | { name: 'diary' }
   | { name: 'resumen' }
@@ -106,10 +108,23 @@ export default function App() {
     window.scrollTo(0, 0);
   }, [view.name]);
 
-  const showResult = (p: Product) => {
+  const showResult = (p: Product, from?: 'search') => {
     addToHistory(p);
     setHistVersion((v) => v + 1);
-    setView({ name: 'result', product: p });
+    setView({ name: 'result', product: p, from });
+  };
+
+  /** Producto encontrado en la búsqueda por supermercado. Si le faltan datos, se completan antes. */
+  const openFound = (p: Product) => {
+    const custom = p.code ? getCustom(p.code) : null;
+    if (custom) return showResult(custom, 'search');
+    const n = p.n;
+    if (n.kcal == null || n.prot == null || n.hc == null || n.grasa == null) {
+      pendingCode.current = p.code;
+      setView({ name: 'form', product: p, note: 'Open Food Facts no tiene todos los valores de este producto. Complétalos o haz una foto de la tabla nutricional.' });
+      return;
+    }
+    showResult(p, 'search');
   };
 
   const handleCode = useCallback(async (code: string) => {
@@ -204,7 +219,7 @@ export default function App() {
   const refreshToday = () => setTodayVersion((v) => v + 1);
 
   const tab = view.name === 'history' || view.name === 'profile' || view.name === 'diary' || view.name === 'resumen' ? view.name : 'scan';
-  const go = (name: 'scan' | 'diary' | 'resumen' | 'history' | 'profile') => setView({ name } as View);
+  const go = (name: 'scan' | 'search' | 'diary' | 'resumen' | 'history' | 'profile') => setView({ name } as View);
 
   // Guarda el resumen de los días del diario al abrir la app (y tras sincronizar), para que no se
   // pierdan cuando el diario recorte los días más antiguos.
@@ -265,11 +280,16 @@ export default function App() {
                 <button className="tile" onClick={() => setView({ name: 'form', product: blank() })} disabled={!!busy}>
                   <PenLine size={22} /> Valores a mano
                 </button>
+                <button className="tile tile-wide" onClick={() => go('search')} disabled={!!busy}>
+                  <Search size={22} /> Buscar en un supermercado
+                </button>
               </div>
               {busy && <p className="busy"><Loader2 className="spin" size={18} /> {busy}</p>}
             </div>
           </div>
         )}
+
+        {view.name === 'search' && <SearchPage profile={profile} onOpen={openFound} onBack={() => go('scan')} />}
 
         {view.name === 'camera' && <Scanner onCode={handleCode} onClose={() => go('scan')} />}
 
@@ -299,7 +319,8 @@ export default function App() {
             onOpen={(p) => showResult(p)}
             onCompare={(b) => setView({ name: 'compare', a: view.product, b })}
             onEdit={() => setView({ name: 'form', product: view.product })}
-            onBack={() => go('scan')}
+            onBack={() => go(view.from ?? 'scan')}
+            backLabel={view.from === 'search' ? 'Volver a la búsqueda' : undefined}
           />
         )}
 

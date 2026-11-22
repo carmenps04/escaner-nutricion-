@@ -19,6 +19,8 @@ interface Props {
   onCompare: (p: Product) => void;
   onEdit: () => void;
   onBack: () => void;
+  /** Texto del botón de volver (por defecto, «Escanear otro»). */
+  backLabel?: string;
 }
 
 const ROWS = [
@@ -32,7 +34,7 @@ const ROWS = [
   ['Sal', 'sal', 'g', 2],
 ] as const;
 
-export default function ResultView({ product, profile, configured, hoy, onTodayChange, onOpen, onCompare, onEdit, onBack }: Props) {
+export default function ResultView({ product, profile, configured, hoy, onTodayChange, onOpen, onCompare, onEdit, onBack, backLabel = 'Escanear otro' }: Props) {
   const e = useMemo(() => evaluate(product, profile), [product, profile]);
   const u = product.liquid ? 'ml' : 'g';
   const Icon = e.verdict === 'buena' ? CheckCircle2 : e.verdict === 'regular' ? MinusCircle : XCircle;
@@ -200,7 +202,7 @@ export default function ResultView({ product, profile, configured, hoy, onTodayC
 
           <div className="actions">
             <button className="btn ghost" onClick={onEdit}><Pencil size={16} /> Corregir</button>
-            <button className="btn primary" onClick={onBack}>Escanear otro</button>
+            <button className="btn primary" onClick={onBack}>{backLabel}</button>
           </div>
         </div>
       </div>

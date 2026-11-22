@@ -63,7 +63,7 @@ export function rankAlternatives(current: Product, candidates: Product[], profil
 
 /** Error de la búsqueda de Open Food Facts, con el motivo para el mensaje. */
 type Reason = 'lento' | 'saturado' | 'red';
-class SearchError extends Error {
+export class SearchError extends Error {
   reason: Reason;
   constructor(reason: Reason) { super(reason); this.reason = reason; }
 }
@@ -74,7 +74,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * La búsqueda de Open Food Facts es mucho más lenta que la consulta por código de barras y a veces
  * responde 503 cuando está saturada. Se le dan 25 s y se reintenta una vez.
  */
-async function fetchSearch(url: string): Promise<any> {
+export async function fetchSearch(url: string): Promise<any> {
   let last: SearchError = new SearchError('red');
   for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt) await wait(1500);
@@ -82,7 +82,10 @@ async function fetchSearch(url: string): Promise<any> {
     const timer = setTimeout(() => ctrl.abort(), 25000);
     try {
       const res = await fetch(url, { signal: ctrl.signal });
-      if (res.ok) return await res.json();
+      if (res.ok) {
+        // Cuando está saturado, Open Food Facts a veces responde una página HTML en lugar de JSON.
+        try { return await res.json(); } catch { last = new SearchError('saturado'); continue; }
+      }
       last = new SearchError(res.status === 429 || res.status >= 500 ? 'saturado' : 'red');
     } catch (e) {
       last = new SearchError((e as Error).name === 'AbortError' ? 'lento' : 'red');
@@ -101,7 +104,7 @@ async function search(category: string, store: string | null): Promise<Product[]
   return (json.products ?? []).filter((x: { code?: string }) => x.code).map((x: Record<string, any>) => fromOff(x.code, x));
 }
 
-const ERROR_TEXT: Record<Reason, string> = {
+export const ERROR_TEXT: Record<Reason, string> = {
   lento: 'Open Food Facts está tardando demasiado en responder. Prueba otra vez en un rato.',
   saturado: 'Open Food Facts está saturado ahora mismo. Prueba otra vez en un rato.',
   red: 'No se ha podido conectar con Open Food Facts. Revisa la conexión y prueba otra vez.',
