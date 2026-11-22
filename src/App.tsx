@@ -222,10 +222,13 @@ export default function App() {
     <div className="app">
       <nav className="nav" aria-label="Secciones">
         <div className="nav-brand"><img src="./favicon.svg" alt="" />Escáner nutricional</div>
-        <button className={`nav-item ${tab === 'scan' ? 'on' : ''}`} onClick={() => go('scan')}><Barcode size={22} />Escanear</button>
+        {/* Lo del escáner de productos, agrupado sobre fondo verde para separarlo del resto. */}
+        <div className="nav-group" role="group" aria-label="Escáner de productos">
+          <button className={`nav-item ${tab === 'scan' ? 'on' : ''}`} onClick={() => go('scan')}><Barcode size={22} />Escanear</button>
+          <button className={`nav-item ${tab === 'history' ? 'on' : ''}`} onClick={() => go('history')}><HistoryIcon size={22} />Historial</button>
+        </div>
         <button className={`nav-item ${tab === 'diary' ? 'on' : ''}`} onClick={() => go('diary')}><NotebookPen size={22} />Diario</button>
         <button className={`nav-item ${tab === 'resumen' ? 'on' : ''}`} onClick={() => go('resumen')}><BarChart3 size={22} />Resumen</button>
-        <button className={`nav-item ${tab === 'history' ? 'on' : ''}`} onClick={() => go('history')}><HistoryIcon size={22} />Historial</button>
         <button className={`nav-item ${tab === 'profile' ? 'on' : ''}`} onClick={() => go('profile')}><User size={22} />Perfil</button>
         <div className="nav-foot">Versión {__APP_VERSION__}</div>
       </nav>
