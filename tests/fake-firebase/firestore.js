@@ -15,6 +15,7 @@ const snap = (coll, list) => {
   return { docs, forEach: (f) => docs.forEach(f) };
 };
 export async function getDocs(coll) { return snap(coll, (await req('list?path=' + encodeURIComponent(coll.path) + '&uid=' + uid())).docs); }
+export const getDocsFromServer = getDocs;
 export function writeBatch() {
   const ops = [];
   return {

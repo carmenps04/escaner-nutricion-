@@ -141,7 +141,7 @@ const dias = (s: Session) => s.fs.collection(s.db, 'usuarios', s.uid, 'diario');
 const ref = (s: Session, id: string) => (isDayId(id) ? s.fs.doc(dias(s), id.slice(7)) : s.fs.doc(datos(s), id));
 
 /** Enlaza este dispositivo con la cuenta: la primera vez junta lo que hay aquí con lo de la nube. */
-async function link(u: User) {
+async function link(u: User, fromServer = false) {
   const s = session!;
   let m = loadMeta(raw);
   if (m.uid && m.uid !== u.uid) {
@@ -149,7 +149,9 @@ async function link(u: User) {
     clearLocal(raw);
     m = { uid: null, synced: {}, localT: {} };
   }
-  const [a, b] = await Promise.all([s.fs.getDocs(datos(s)), s.fs.getDocs(dias(s))]);
+  // fromServer: se pide al servidor aunque haya copia local (para «Sincronizar ahora»).
+  const get = fromServer ? s.fs.getDocsFromServer : s.fs.getDocs;
+  const [a, b] = await Promise.all([get(datos(s)), get(dias(s))]);
   const remote: Record<string, { v: string; t: number }> = {};
   a.forEach((d) => { remote[d.id] = d.data() as { v: string; t: number }; });
   b.forEach((d) => { remote[`diario/${d.id}`] = d.data() as { v: string; t: number }; });
@@ -322,8 +324,35 @@ export async function deleteAccount(password: string, wipeLocal: boolean): Promi
   notify();
 }
 
+/**
+ * «Sincronizar ahora»: siempre consulta la nube (trae lo cambiado en otros dispositivos), sube lo
+ * pendiente y actualiza la hora. Si algo falla, lanza el error para enseñarlo.
+ */
 export async function syncNow(): Promise<void> {
-  if (session) await (session.linked ? push() : connect());
+  if (!navigator.onLine) throw new Error('Sin conexión. Se sincronizará cuando vuelva internet.');
+  if (!session) {
+    if (!loadMeta(raw).uid) throw new Error('No has iniciado sesión.');
+    // La cuenta aún se está cargando: se espera un poco a que esté lista.
+    await loadAuth();
+    for (let i = 0; i < 40 && !session; i++) await new Promise((r) => setTimeout(r, 200));
+    if (!session) throw new Error('No se ha podido conectar con tu cuenta. Prueba otra vez en unos segundos.');
+  }
+  const s = session;
+  setStatus({ state: 'sincronizando', error: undefined });
+  try {
+    await link(s.user, true);
+    if (!s.linked) { s.linked = true; listen(); }
+  } catch (e) {
+    const error = firestoreError(e);
+    setStatus({ state: navigator.onLine ? 'error' : 'sin-conexion', error });
+    throw new Error(error);
+  }
+  await push();
+  if (getStatus().state === 'error') throw new Error(getStatus().error ?? 'No se ha podido sincronizar.');
+  const m = loadMeta(raw);
+  m.last = Date.now();
+  saveMeta(raw, m);
+  setStatus({ state: 'al-dia', last: m.last, error: undefined });
 }
 
 const code = (e: unknown) => String((e as { code?: string })?.code ?? '');

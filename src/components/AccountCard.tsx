@@ -52,13 +52,14 @@ export default function AccountCard({ toast }: { toast: (m: string) => void }) {
         </p>
         <p className="small muted">Tus datos se guardan en este dispositivo y en tu cuenta. En otro móvil u ordenador, entra con el mismo correo y contraseña.</p>
         <div className="account-actions">
-          <button className="btn ghost small-btn" disabled={!!busy || s.state === 'sincronizando'} onClick={() => run('sync', syncNow)}>
-            <RefreshCw size={15} /> Sincronizar ahora
+          <button className="btn ghost small-btn" disabled={!!busy || s.state === 'sincronizando'} onClick={() => run('sync', syncNow, 'Sincronizado')}>
+            {busy === 'sync' ? <Loader2 className="spin" size={15} /> : <RefreshCw size={15} />} Sincronizar ahora
           </button>
           <button className="btn ghost small-btn" disabled={!!busy} onClick={() => run('in', signOut, 'Sesión cerrada')}>
             <LogOut size={15} /> Cerrar sesión
           </button>
         </div>
+        {error && !deleting && <p className="note warn-note">{error}</p>}
         <p className="small muted">Al cerrar sesión, los datos se quedan en este dispositivo pero dejan de sincronizarse.</p>
         <Privacy />
         {!deleting ? (

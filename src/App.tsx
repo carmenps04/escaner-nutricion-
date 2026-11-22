@@ -67,9 +67,12 @@ export default function App() {
   const pendingCode = useRef<string | undefined>(undefined);
   const main = useRef<HTMLElement>(null);
 
+  // Cada aviso dura 3,5 s desde que aparece (el temporizador del anterior no lo borra antes).
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toast = useCallback((m: string) => {
     setMsg(m);
-    setTimeout(() => setMsg(null), 3500);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setMsg(null), 3500);
   }, []);
 
   // Enlaces «#datos=…» (todos los datos) y «#perfil=…» (solo el perfil): nunca se cargan solos. Se
