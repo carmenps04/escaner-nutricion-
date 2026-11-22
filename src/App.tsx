@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { initCloud } from './lib/cloud.ts';
-import { Barcode, Camera, History as HistoryIcon, Keyboard, Loader2, NotebookPen, PenLine, ScanLine, Trash2, User, WifiOff, Image as ImageIcon } from 'lucide-react';
+import { BarChart3, Barcode, Camera, History as HistoryIcon, Keyboard, Loader2, NotebookPen, PenLine, ScanLine, Trash2, User, WifiOff, Image as ImageIcon } from 'lucide-react';
 import Scanner, { decodeBarcodePhoto } from './components/Scanner.tsx';
 import ProductForm from './components/ProductForm.tsx';
 import ResultView from './components/ResultView.tsx';
@@ -17,6 +17,8 @@ import { askPersistence } from './lib/backup.ts';
 import TodayChip from './components/TodayChip.tsx';
 import DiaryPage from './components/DiaryPage.tsx';
 import CompareView from './components/CompareView.tsx';
+import ResumenPage from './components/ResumenPage.tsx';
+import { refreshSummaries } from './lib/resumen.ts';
 
 type View =
   | { name: 'scan' }
@@ -25,6 +27,7 @@ type View =
   | { name: 'result'; product: Product }
   | { name: 'compare'; a: Product; b: Product }
   | { name: 'diary' }
+  | { name: 'resumen' }
   | { name: 'history' }
   | { name: 'profile' };
 
@@ -206,8 +209,14 @@ export default function App() {
   const hoy = useMemo(() => today(profile), [profile, todayVersion, view.name]);
   const refreshToday = () => setTodayVersion((v) => v + 1);
 
-  const tab = view.name === 'history' || view.name === 'profile' || view.name === 'diary' ? view.name : 'scan';
-  const go = (name: 'scan' | 'diary' | 'history' | 'profile') => setView({ name } as View);
+  const tab = view.name === 'history' || view.name === 'profile' || view.name === 'diary' || view.name === 'resumen' ? view.name : 'scan';
+  const go = (name: 'scan' | 'diary' | 'resumen' | 'history' | 'profile') => setView({ name } as View);
+
+  // Guarda el resumen de los días del diario al abrir la app (y tras sincronizar), para que no se
+  // pierdan cuando el diario recorte los días más antiguos.
+  useEffect(() => {
+    if (configured) refreshSummaries(profile);
+  }, [profile, configured, syncVersion]);
 
   return (
     <div className="app">
@@ -215,6 +224,7 @@ export default function App() {
         <div className="nav-brand"><img src="./favicon.svg" alt="" />Escáner nutricional</div>
         <button className={`nav-item ${tab === 'scan' ? 'on' : ''}`} onClick={() => go('scan')}><Barcode size={22} />Escanear</button>
         <button className={`nav-item ${tab === 'diary' ? 'on' : ''}`} onClick={() => go('diary')}><NotebookPen size={22} />Diario</button>
+        <button className={`nav-item ${tab === 'resumen' ? 'on' : ''}`} onClick={() => go('resumen')}><BarChart3 size={22} />Resumen</button>
         <button className={`nav-item ${tab === 'history' ? 'on' : ''}`} onClick={() => go('history')}><HistoryIcon size={22} />Historial</button>
         <button className={`nav-item ${tab === 'profile' ? 'on' : ''}`} onClick={() => go('profile')}><User size={22} />Perfil</button>
         <div className="nav-foot">Versión {__APP_VERSION__}</div>
@@ -303,6 +313,8 @@ export default function App() {
         {view.name === 'diary' && (
           <DiaryPage profile={profile} hoy={hoy} onOpen={(p) => setView({ name: 'result', product: p })} toast={toast} />
         )}
+
+        {view.name === 'resumen' && <ResumenPage key={syncVersion} profile={profile} />}
 
         {view.name === 'history' && (
           <div className="page narrow">

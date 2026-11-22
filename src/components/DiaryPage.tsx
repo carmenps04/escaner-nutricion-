@@ -4,10 +4,11 @@ import MealBuilder from './MealBuilder.tsx';
 import type { Profile } from '../lib/profile.ts';
 import type { Product } from '../lib/types.ts';
 import { dowOf, type Today } from '../lib/training.ts';
-import { addEntry, dayKey, itemGrams, loadDay, remaining, removeEntry, totals, updateEntry, forGrams, type DiaryEntry, type Totals, kcalLevel, type KcalLevel } from '../lib/diary.ts';
+import { addEntry, dayKey, itemGrams, MEAL_TIMES, nextMeal, loadDay, remaining, removeEntry, totals, updateEntry, forGrams, type DiaryEntry, type Totals, kcalLevel, type KcalLevel } from '../lib/diary.ts';
 import { fmt, plural } from '../lib/evaluate.ts';
 import { loadPlan, mealTarget } from '../lib/plan.ts';
 import { useDraft, VsPlan } from './MealBuilder.tsx';
+import { saveDaySummary } from '../lib/resumen.ts';
 
 const num = (s: string) => {
   const t = s.replace(',', '.').trim();
@@ -28,6 +29,7 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
   const key = dayKey(date);
   const isToday = key === dayKey();
   const entries = loadDay(key);
+  const taken = entries.map((e) => e.name);
   void version;
   // Hoy manda el ajuste del día; otros días, la semana del perfil.
   const entreno = isToday ? hoy.entreno : (profile.semana ?? []).some((t) => t.dow === dowOf(date));
@@ -51,7 +53,11 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
     io.observe(el);
     return () => io.disconnect();
   }, []);
-  const refresh = () => setVersion((v) => v + 1);
+  // Cada cambio del día actualiza su resumen guardado (se conserva aunque el diario se recorte).
+  const refresh = () => {
+    saveDaySummary(key, profile, entreno);
+    setVersion((v) => v + 1);
+  };
   const shift = (days: number) => {
     const d = new Date(date);
     d.setDate(d.getDate() + days);
@@ -118,12 +124,12 @@ export default function DiaryPage({ profile, hoy, onOpen, toast }: Props) {
           </div>
         )}
         {adding === 'meal' && (
-          <MealBuilder entreno={entreno} onDraft={onDraft()} onCancel={() => setAdding(null)} onSave={(e) => { addEntry(e, key); setAdding(null); refresh(); toast('Comida añadida al diario'); }} />
+          <MealBuilder taken={taken} entreno={entreno} onDraft={onDraft()} onCancel={() => setAdding(null)} onSave={(e) => { addEntry(e, key); setAdding(null); refresh(); toast('Comida añadida al diario'); }} />
         )}
-        {adding === 'manual' && <ManualEntry onDraft={onDraft()} onCancel={() => setAdding(null)} onAdd={(e) => { addEntry(e, key); setAdding(null); refresh(); toast('Añadido al diario'); }} />}
+        {adding === 'manual' && <ManualEntry defaultTime={MEAL_TIMES[nextMeal(taken)]} onDraft={onDraft()} onCancel={() => setAdding(null)} onAdd={(e) => { addEntry(e, key); setAdding(null); refresh(); toast('Añadido al diario'); }} />}
         {entries.length ? (
           <div className="entries">
-            {entries.map((e) => <EntryRow key={e.id} e={e} day={key} entreno={entreno} onDraft={onDraft(e.id)} onOpen={onOpen} onChange={refresh} />)}
+            {entries.map((e) => <EntryRow key={e.id} e={e} day={key} entreno={entreno} taken={taken} onDraft={onDraft(e.id)} onOpen={onOpen} onChange={refresh} />)}
           </div>
         ) : (
           !adding && <p className="empty">Aún no has apuntado nada {isToday ? 'hoy' : 'este día'}.</p>
@@ -204,7 +210,7 @@ function DraftStrip({ t, before, plan, tone }: { t: Totals; before: Totals; plan
   );
 }
 
-function EntryRow({ e, day, entreno, onDraft, onOpen, onChange }: { e: DiaryEntry; day: string; entreno: boolean; onDraft: (t: Totals | null) => void; onOpen: (p: Product) => void; onChange: () => void }) {
+function EntryRow({ e, day, entreno, taken, onDraft, onOpen, onChange }: { e: DiaryEntry; day: string; entreno: boolean; taken: string[]; onDraft: (t: Totals | null) => void; onOpen: (p: Product) => void; onChange: () => void }) {
   const target = useMemo(() => mealTarget(loadPlan(), e.name, entreno), [e.name, entreno]);
   const [editing, setEditing] = useState(false);
   const [qty, setQty] = useState(String(e.units ?? e.grams ?? '').replace('.', ','));
@@ -226,7 +232,7 @@ function EntryRow({ e, day, entreno, onDraft, onOpen, onChange }: { e: DiaryEntr
   if (editing && e.items) {
     return (
       <div className="entry">
-        <MealBuilder initial={e} entreno={entreno} onDraft={onDraft} onCancel={() => setEditing(false)} onSave={(m) => { updateEntry(e.id, m, day); setEditing(false); onChange(); }} />
+        <MealBuilder initial={e} taken={taken} entreno={entreno} onDraft={onDraft} onCancel={() => setEditing(false)} onSave={(m) => { updateEntry(e.id, m, day); setEditing(false); onChange(); }} />
       </div>
     );
   }
@@ -294,9 +300,10 @@ function EntryRow({ e, day, entreno, onDraft, onOpen, onChange }: { e: DiaryEntr
   );
 }
 
-function ManualEntry({ onAdd, onCancel, initial, onDraft }: { onAdd: (e: Omit<DiaryEntry, 'id' | 'time'> & { time?: string }) => void; onCancel: () => void; initial?: DiaryEntry; onDraft?: (t: Totals | null) => void }) {
+function ManualEntry({ onAdd, onCancel, initial, onDraft, defaultTime = '13:30' }: { onAdd: (e: Omit<DiaryEntry, 'id' | 'time'> & { time?: string }) => void; onCancel: () => void; initial?: DiaryEntry; onDraft?: (t: Totals | null) => void; defaultTime?: string }) {
   const str = (x?: number) => (x == null ? '' : String(Math.round(x * 10) / 10).replace('.', ','));
-  const [time, setTime] = useState(() => initial?.time ?? new Date().toTimeString().slice(0, 5));
+  // Sin la hora del reloj: la habitual de la siguiente comida que falta por apuntar.
+  const [time, setTime] = useState(() => initial?.time ?? defaultTime);
   const [v, setV] = useState({ name: initial?.name ?? '', kcal: str(initial?.kcal), prot: str(initial?.prot), hc: str(initial?.hc), grasa: str(initial?.grasa) });
   const set = (k: keyof typeof v) => (ev: React.ChangeEvent<HTMLInputElement>) => setV({ ...v, [k]: ev.target.value });
   const ok = v.name.trim() && num(v.kcal) > 0;
@@ -315,7 +322,7 @@ function ManualEntry({ onAdd, onCancel, initial, onDraft }: { onAdd: (e: Omit<Di
       </div>
       <div className="cita-actions">
         <button className="btn ghost small-btn" onClick={onCancel}>Cancelar</button>
-        <button className="btn primary small-btn" disabled={!ok} onClick={() => onAdd({ name: v.name.trim(), time: time || undefined, grams: null, kcal: num(v.kcal), prot: num(v.prot), hc: num(v.hc), grasa: num(v.grasa) })}>{initial ? 'Guardar' : 'Añadir'}</button>
+        <button className="btn primary small-btn" disabled={!ok} onClick={() => onAdd({ name: v.name.trim(), time: time || initial?.time || defaultTime, grams: null, kcal: num(v.kcal), prot: num(v.prot), hc: num(v.hc), grasa: num(v.grasa) })}>{initial ? 'Guardar' : 'Añadir'}</button>
       </div>
     </div>
   );

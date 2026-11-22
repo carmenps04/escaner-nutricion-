@@ -3,11 +3,10 @@ import { ClipboardList, History, Leaf, Plus, Search, Trash2 } from 'lucide-react
 import type { Product } from '../lib/types.ts';
 import { addToHistory, loadHistory } from '../lib/storage.ts';
 import { FOODS } from '../lib/foods.ts';
-import { forGrams, itemGrams, mealTotals, pastMeals, type DiaryEntry, type MealItem, type PastMeal, type Totals } from '../lib/diary.ts';
+import { forGrams, itemGrams, MEAL_TIMES, MEALS, mealTotals, nextMeal, pastMeals, type DiaryEntry, type MealItem, type PastMeal, type Totals } from '../lib/diary.ts';
 import { fmt, plural } from '../lib/evaluate.ts';
 import { fruitPortion, fruitRaciones, loadPlan, mealTarget, vegRule } from '../lib/plan.ts';
 
-const MEALS = ['Desayuno', 'Media mañana', 'Almuerzo', 'Merienda', 'Cena'];
 /** Comidas en femenino, para escribir «una merienda» / «ninguna cena». */
 const FEM = new Set(['Media mañana', 'Merienda', 'Cena']);
 const num = (s: string) => {
@@ -15,19 +14,12 @@ const num = (s: string) => {
   return t === '' || !isFinite(+t) ? 0 : +t;
 };
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-const nowHHMM = () => {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-};
-/** Comida que corresponde a la hora, para proponerla como nombre. */
-const mealForTime = (t: string) => {
-  const h = parseInt(t, 10);
-  return h < 11 ? 'Desayuno' : h < 13 ? 'Media mañana' : h < 16 ? 'Almuerzo' : h < 20 ? 'Merienda' : 'Cena';
-};
 
 interface Props {
   /** Para editar una comida ya apuntada. */
   initial?: DiaryEntry;
+  /** Comidas ya apuntadas ese día: se propone la siguiente que falta. */
+  taken?: string[];
   /** Día de entreno: cambia las raciones del plan del dietista. */
   entreno: boolean;
   /** Lo que suma la comida mientras se prepara, para ver cómo quedaría el día. */
@@ -40,9 +32,15 @@ interface Props {
  * Comida con varios ingredientes: se eligen productos ya escaneados (historial) con su cantidad y la
  * app suma calorías y macros.
  */
-export default function MealBuilder({ initial, entreno, onDraft, onSave, onCancel }: Props) {
-  const [time, setTime] = useState(initial?.time ?? nowHHMM());
-  const [name, setName] = useState(() => (initial && MEALS.includes(initial.name) ? initial.name : mealForTime(initial?.time ?? nowHHMM())));
+export default function MealBuilder({ initial, taken = [], entreno, onDraft, onSave, onCancel }: Props) {
+  // Cada comida tiene su hora habitual; la hora del reloj no se usa.
+  const [name, setName] = useState(() => (initial && MEALS.includes(initial.name) ? initial.name : nextMeal(taken)));
+  const [time, setTime] = useState(() => initial?.time ?? MEAL_TIMES[name]);
+  /** Al cambiar de comida, la hora pasa a la habitual salvo que se haya cambiado a mano. */
+  const changeMeal = (m: string) => {
+    if (time === MEAL_TIMES[name]) setTime(MEAL_TIMES[m]);
+    setName(m);
+  };
   const [items, setItems] = useState<MealItem[]>(initial?.items ?? []);
   const [q, setQ] = useState('');
   const products = useMemo(() => loadHistory().map((h) => h.product), []);
@@ -105,7 +103,7 @@ export default function MealBuilder({ initial, entreno, onDraft, onSave, onCance
       <div className="grid-2 meal-head">
         <label className="field">
           <span>Comida</span>
-          <select value={name} onChange={(e) => { setName(e.target.value); setPicked(''); }}>
+          <select value={name} onChange={(e) => { changeMeal(e.target.value); setPicked(''); }}>
             {MEALS.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </label>

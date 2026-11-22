@@ -115,6 +115,8 @@ export function mergeUnit(id: string, local: string, remote: string): string {
     }
     return JSON.stringify([...byKey.values()].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 100));
   }
+  // Resúmenes por día: se juntan los dos y, si un día está en ambos, manda la nube.
+  if (id === 'escaner.resumen.v1') return JSON.stringify({ ...parse<Obj>(local, {}), ...parse<Obj>(remote, {}) });
   if (id === 'escaner.propios.v1') return JSON.stringify({ ...parse<Obj>(local, {}), ...parse<Obj>(remote, {}) });
   if (id === 'escaner.citas.v1') {
     const r = parse<Obj[]>(remote, []);

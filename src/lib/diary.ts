@@ -71,6 +71,26 @@ function writeAll(all: Record<string, DiaryEntry[]>): void {
   } catch { /* almacenamiento lleno */ }
 }
 
+/** Todo el diario (día → comidas). */
+export function loadAllDays(): Record<string, DiaryEntry[]> {
+  return readAll();
+}
+
+/** Comidas del día, en orden, con su hora habitual (se puede cambiar al apuntarla). */
+export const MEALS = ['Desayuno', 'Media mañana', 'Almuerzo', 'Merienda', 'Cena'];
+export const MEAL_TIMES: Record<string, string> = {
+  Desayuno: '08:30',
+  'Media mañana': '11:30',
+  Almuerzo: '13:30',
+  Merienda: '15:00',
+  Cena: '21:00',
+};
+
+/** Comida que se propone al añadir: la primera del día que aún no está apuntada. */
+export function nextMeal(taken: string[]): string {
+  return MEALS.find((m) => !taken.includes(m)) ?? 'Cena';
+}
+
 export function loadDay(day = dayKey()): DiaryEntry[] {
   return (readAll()[day] ?? []).sort((a, b) => a.time.localeCompare(b.time));
 }

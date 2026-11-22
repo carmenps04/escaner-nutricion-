@@ -9,6 +9,7 @@ export const KEYS = [
   'escaner.diario.v1',
   'escaner.orden',
   'escaner.plan.v1',
+  'escaner.resumen.v1',
 ];
 
 export interface Backup {
