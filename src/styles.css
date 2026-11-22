@@ -568,3 +568,15 @@ button.vbar:hover .vbar-track, button.vbar:focus-visible .vbar-track { backgroun
   .vbars.compact .vbar-val { font-size: 10px; }
   .vbars.compact .vbar-label { font-size: 10px; }
 }
+
+/* ───────────── Cuenta: privacidad y borrado ───────────── */
+.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.4; cursor: pointer; }
+.check input[type='checkbox'] { -webkit-appearance: checkbox; appearance: auto; width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--accent-text); border-radius: 4px; }
+.privacy { font-size: 14px; }
+.privacy summary { cursor: pointer; color: var(--accent-text); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; list-style: none; }
+.privacy summary::-webkit-details-marker { display: none; }
+.privacy ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; color: var(--muted); }
+.privacy b { color: var(--text); font-weight: 600; }
+.link.danger-link { color: var(--bad-ink); align-self: flex-start; }
+.delete-account { display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--bad); color: var(--bad-ink); border-radius: var(--radius-sm); }
+.delete-account .field span { color: var(--bad-ink); }

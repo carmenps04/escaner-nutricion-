@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Cloud, CloudOff, Loader2, LogOut, RefreshCw, UserRound } from 'lucide-react';
-import { getStatus, onStatus, resetPassword, signIn, signOut, signUp, syncNow, type SyncStatus } from '../lib/cloud.ts';
+import { Cloud, CloudOff, Loader2, LogOut, RefreshCw, ShieldCheck, Trash2, UserRound } from 'lucide-react';
+import { deleteAccount, getStatus, onStatus, resetPassword, signIn, signOut, signUp, syncNow, type SyncStatus } from '../lib/cloud.ts';
 
 export function useSyncStatus(): SyncStatus {
   const [s, setS] = useState(getStatus);
@@ -15,11 +15,14 @@ export default function AccountCard({ toast }: { toast: (m: string) => void }) {
   const s = useSyncStatus();
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
-  const [busy, setBusy] = useState<null | 'in' | 'up' | 'reset' | 'sync'>(null);
+  const [busy, setBusy] = useState<null | 'in' | 'up' | 'reset' | 'sync' | 'delete'>(null);
+  const [consent, setConsent] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [wipeLocal, setWipeLocal] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const logged = s.state !== 'fuera' && !!s.email;
 
-  const run = async (kind: 'in' | 'up' | 'reset' | 'sync', fn: () => Promise<void>, ok?: string) => {
+  const run = async (kind: 'in' | 'up' | 'reset' | 'sync' | 'delete', fn: () => Promise<void>, ok?: string) => {
     setBusy(kind);
     setError(null);
     try {
@@ -57,6 +60,36 @@ export default function AccountCard({ toast }: { toast: (m: string) => void }) {
           </button>
         </div>
         <p className="small muted">Al cerrar sesión, los datos se quedan en este dispositivo pero dejan de sincronizarse.</p>
+        <Privacy />
+        {!deleting ? (
+          <button className="link danger-link" onClick={() => { setDeleting(true); setError(null); setPass(''); }}>
+            <Trash2 size={14} style={{ verticalAlign: '-2px' }} /> Borrar mi cuenta y mis datos
+          </button>
+        ) : (
+          <form className="delete-account" onSubmit={(e) => {
+            e.preventDefault();
+            if (!pass) return;
+            void run('delete', () => deleteAccount(pass, wipeLocal), wipeLocal ? 'Cuenta y datos borrados' : 'Cuenta borrada; los datos siguen en este dispositivo');
+          }}>
+            <strong>Borrar la cuenta {s.email}</strong>
+            <p className="small">Se borran para siempre la cuenta y todo lo guardado en la nube (perfil, citas, diario, productos y resúmenes). No se puede deshacer. Si quieres conservar algo, descarga antes una copia en «Tus datos».</p>
+            <label className="check">
+              <input type="checkbox" checked={wipeLocal} onChange={(e) => setWipeLocal(e.target.checked)} />
+              <span>Borrar también los datos de este dispositivo</span>
+            </label>
+            <label className="field">
+              <span>Escribe tu contraseña para confirmar</span>
+              <input type="password" autoComplete="current-password" value={pass} onChange={(e) => setPass(e.target.value)} />
+            </label>
+            {error && <p className="note warn-note">{error}</p>}
+            <div className="cita-actions">
+              <button type="button" className="btn ghost small-btn" disabled={!!busy} onClick={() => { setDeleting(false); setPass(''); setError(null); }}>Cancelar</button>
+              <button type="submit" className="btn danger small-btn" disabled={!pass || !!busy}>
+                {busy === 'delete' && <Loader2 className="spin" size={15} />} Borrar para siempre
+              </button>
+            </div>
+          </form>
+        )}
       </section>
     );
   }
@@ -75,12 +108,17 @@ export default function AccountCard({ toast }: { toast: (m: string) => void }) {
           <span>Contraseña</span>
           <input type="password" autoComplete="current-password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Mínimo 6 caracteres" />
         </label>
+        <label className="check">
+          <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+          <span>Para crear una cuenta: acepto que mis datos de salud (peso, composición corporal, plan y diario) se guarden en mi cuenta para sincronizarlos.</span>
+        </label>
+        <Privacy />
         {error && <p className="note warn-note">{error}</p>}
         <div className="account-actions">
           <button type="submit" className="btn primary small-btn" disabled={!valid || !!busy}>
             {busy === 'in' && <Loader2 className="spin" size={15} />} Entrar
           </button>
-          <button type="button" className="btn ghost small-btn" disabled={!valid || !!busy} onClick={() => run('up', () => signUp(email, pass), 'Cuenta creada')}>
+          <button type="button" className="btn ghost small-btn" disabled={!valid || !consent || !!busy} title={consent ? undefined : 'Marca la casilla de arriba para crear la cuenta'} onClick={() => run('up', () => signUp(email, pass), 'Cuenta creada')}>
             {busy === 'up' && <Loader2 className="spin" size={15} />} Crear cuenta
           </button>
         </div>
@@ -90,5 +128,21 @@ export default function AccountCard({ toast }: { toast: (m: string) => void }) {
         }}>He olvidado la contraseña</button>
       </form>
     </section>
+  );
+}
+
+/** Qué se guarda, dónde y cómo borrarlo. */
+function Privacy() {
+  return (
+    <details className="privacy">
+      <summary><ShieldCheck size={14} /> Privacidad: qué se guarda y dónde</summary>
+      <ul>
+        <li><b>Qué:</b> tu correo, el perfil y las citas del dietista (peso, composición corporal, calorías y macros), el plan, el diario de comidas, los productos escaneados y los resúmenes. Son datos de salud.</li>
+        <li><b>Para qué:</b> solo para que la app funcione y tengas los mismos datos en tus dispositivos. No se usan para publicidad ni se comparten.</li>
+        <li><b>Dónde:</b> en tu dispositivo y, si tienes cuenta, en Firebase (Google), en servidores de la Unión Europea. Solo se pueden leer con tu cuenta.</li>
+        <li><b>Fuera de la app:</b> al buscar un código de barras se envía ese código a Open Food Facts. Las fotos de etiquetas y de la hoja del dietista se leen en el propio móvil y no se envían a ningún sitio.</li>
+        <li><b>Tus derechos:</b> puedes descargar una copia en «Tus datos» y borrar la cuenta con todos sus datos desde aquí cuando quieras.</li>
+      </ul>
+    </details>
   );
 }

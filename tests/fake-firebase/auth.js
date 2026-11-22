@@ -24,3 +24,6 @@ export async function signInWithEmailAndPassword(_a, email, password) { const u 
 export async function createUserWithEmailAndPassword(_a, email, password) { const u = await call({ mode: 'up', email, password }); setUser(u); return { user: u }; }
 export async function sendPasswordResetEmail() {}
 export async function signOut() { setUser(null); }
+export const EmailAuthProvider = { credential: (email, password) => ({ email, password }) };
+export async function reauthenticateWithCredential(_u, c) { await call({ mode: 'in', ...c }); }
+export async function deleteUser(u) { await call({ mode: 'delete', uid: u.uid }); setUser(null); }

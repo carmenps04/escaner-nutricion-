@@ -4,7 +4,7 @@ import { applyBackup, backupLink, describe, downloadBackup, parseBackup, type Ba
 
 interface Props {
   toast: (m: string) => void;
-  /** Código recibido por enlace (#datos=…), pendiente de confirmar. */
+  /** Código recibido por enlace (#datos=… o #perfil=…), pendiente de confirmar. */
   pending?: string | null;
   onPendingDone: () => void;
 }
@@ -14,12 +14,18 @@ export default function DataCard({ toast, pending, onPendingDone }: Props) {
   const [text, setText] = useState('');
   const [candidate, setCandidate] = useState<Backup | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingFromLink, setPendingFromLink] = useState(false);
   const file = useRef<HTMLInputElement>(null);
+  const confirmBox = useRef<HTMLDivElement>(null);
+  // La confirmación queda debajo de la cuenta: al llegar por un enlace, se lleva a la vista.
+  useEffect(() => {
+    if (pendingFromLink && candidate) confirmBox.current?.scrollIntoView({ block: 'center' });
+  }, [pendingFromLink, candidate]);
 
   useEffect(() => {
     if (!pending) return;
     const b = parseBackup(pending);
-    if (b) setCandidate(b);
+    if (b) { setCandidate(b); setPendingFromLink(true); }
     else setError('El enlace no contiene datos válidos.');
     onPendingDone();
   }, [pending, onPendingDone]);
@@ -43,6 +49,7 @@ export default function DataCard({ toast, pending, onPendingDone }: Props) {
       return;
     }
     setError(null);
+    setPendingFromLink(false);
     setCandidate(b);
   };
 
@@ -84,12 +91,13 @@ export default function DataCard({ toast, pending, onPendingDone }: Props) {
       {error && <p className="small over">{error}</p>}
 
       {candidate && s && (
-        <div className="cita-confirm data-confirm">
+        <div className="cita-confirm data-confirm" ref={confirmBox}>
           <span>
+            {pendingFromLink && 'Has abierto un enlace con datos para la app. Cárgalos solo si el enlace es tuyo o te lo ha enviado alguien de confianza. '}
             Se cargarán: {[s.perfil && 'tu perfil', s.productos && `${s.productos} ${s.productos === 1 ? 'producto' : 'productos'}`, s.dias && `${s.dias} ${s.dias === 1 ? 'día' : 'días'} de diario`, s.citas && `${s.citas} ${s.citas === 1 ? 'cita' : 'citas'}`, s.plan && 'el plan del dietista'].filter(Boolean).join(', ')}.
             Sustituye eso mismo en este dispositivo; lo demás no se toca.
           </span>
-          <button className="btn ghost small-btn" onClick={() => { setCandidate(null); setText(''); }}>Cancelar</button>
+          <button className="btn ghost small-btn" onClick={() => { setCandidate(null); setText(''); setPendingFromLink(false); }}>Cancelar</button>
           <button className="btn primary small-btn" onClick={confirm}>Cargar datos</button>
         </div>
       )}

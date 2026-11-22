@@ -6,7 +6,7 @@ import ProductForm from './components/ProductForm.tsx';
 import ResultView from './components/ResultView.tsx';
 import ProfilePage from './components/ProfilePage.tsx';
 import { EMPTY_NUTRIENTS, type Product } from './lib/types.ts';
-import { hasProfile, importFromHash, loadProfile, type Profile } from './lib/profile.ts';
+import { hasProfile, loadProfile, type Profile } from './lib/profile.ts';
 import { lookupBarcode } from './lib/off.ts';
 import { parseLabel } from './lib/parseLabel.ts';
 import { readImage, statusText } from './lib/ocr.ts';
@@ -36,7 +36,6 @@ const blank = (code?: string): Product => ({ code, name: '', n: { ...EMPTY_NUTRI
 export default function App() {
   const [view, setView] = useState<View>({ name: 'scan' });
   const [profile, setProfile] = useState<Profile>(() => {
-    importFromHash();
     return loadProfile();
   });
   const [configured, setConfigured] = useState(hasProfile);
@@ -73,24 +72,16 @@ export default function App() {
     setTimeout(() => setMsg(null), 3500);
   }, []);
 
-  // Si la app ya está abierta y se abre el enlace #perfil=…, el navegador no recarga la página:
-  // solo cambia el «#». Por eso también se escucha ese cambio.
+  // Enlaces «#datos=…» (todos los datos) y «#perfil=…» (solo el perfil): nunca se cargan solos. Se
+  // abre «Tus datos» y se pide confirmar, para que un enlace ajeno no cambie el plan sin avisar.
+  // Si la app ya está abierta, el navegador no recarga la página al abrir el enlace: solo cambia el «#».
   useEffect(() => {
     const onHash = () => {
-      // «#datos=…»: todos los datos; se piden confirmar en el perfil antes de sustituir nada.
-      const m = location.hash.match(/datos=[A-Za-z0-9_\-+/=]+/);
-      if (m) {
-        setPendingImport(m[0]);
-        history.replaceState(null, '', location.pathname + location.search);
-        setView({ name: 'profile' });
-        return;
-      }
-      if (importFromHash()) {
-        setProfile(loadProfile());
-        setConfigured(true);
-        setView({ name: 'profile' });
-        toast('Perfil cargado');
-      }
+      const m = location.hash.match(/(?:datos|perfil)=[A-Za-z0-9_\-+/=]+/);
+      if (!m) return;
+      setPendingImport(m[0]);
+      history.replaceState(null, '', location.pathname + location.search);
+      setView({ name: 'profile' });
     };
     onHash();
     window.addEventListener('hashchange', onHash);

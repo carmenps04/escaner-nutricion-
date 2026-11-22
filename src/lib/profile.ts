@@ -98,26 +98,6 @@ export function hasProfile(): boolean {
   }
 }
 
-/**
- * Carga un perfil desde el enlace «…#perfil=<base64>». Lo que va tras «#» no se envía a ningún
- * servidor: solo lo lee el navegador. Devuelve true si se ha importado.
- */
-export function importFromHash(): boolean {
-  const m = location.hash.match(/perfil=([A-Za-z0-9_\-+/=]+)/);
-  if (!m) return false;
-  try {
-    const b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
-    const json = decodeURIComponent(escape(atob(b64)));
-    const p = { ...DEFAULT_PROFILE, ...JSON.parse(json) } as Profile;
-    if (!p.peso || !p.descanso?.kcal || !p.entreno?.kcal) return false;
-    saveProfile(p);
-    history.replaceState(null, '', location.pathname + location.search);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function loadProfile(): Profile {
   try {
     const raw = localStorage.getItem(KEY);

@@ -278,6 +278,50 @@ export async function signOut(): Promise<void> {
   const m = loadMeta(raw);
   saveMeta(raw, { ...m, localT: {} });
 }
+/**
+ * Borra la cuenta y todo lo que hay en la nube (derecho de supresión). Firebase pide haber entrado
+ * hace poco para borrar una cuenta, por eso se vuelve a pedir la contraseña.
+ * Con wipeLocal también se borran los datos de este dispositivo; si no, se quedan aquí sin cuenta.
+ */
+export async function deleteAccount(password: string, wipeLocal: boolean): Promise<void> {
+  const { auth, mod } = await loadAuth();
+  const u = auth.currentUser;
+  if (!u?.email) throw new Error('No hay ninguna sesión iniciada.');
+  try {
+    await mod.reauthenticateWithCredential(u, mod.EmailAuthProvider.credential(u.email, password));
+  } catch (e) {
+    throw new Error(authError(e));
+  }
+  const fs = await import('firebase/firestore');
+  const { getApps } = await import('firebase/app');
+  const db = fs.getFirestore(getApps()[0]);
+  // Se deja de escuchar antes de borrar: si no, los borrados de la nube vaciarían este dispositivo.
+  session?.unsub.forEach((f) => f());
+  session = null;
+  if (timer) clearTimeout(timer);
+  try {
+    for (const col of ['datos', 'diario']) {
+      const snap = await fs.getDocs(fs.collection(db, 'usuarios', u.uid, col));
+      for (let i = 0; i < snap.docs.length; i += 400) {
+        const batch = fs.writeBatch(db);
+        snap.docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
+    }
+  } catch (e) {
+    throw new Error(`No se han podido borrar los datos de la nube: ${firestoreError(e)} La cuenta no se ha borrado; prueba otra vez.`);
+  }
+  try {
+    await mod.deleteUser(u);
+  } catch (e) {
+    throw new Error(`Los datos de la nube están borrados, pero la cuenta no: ${authError(e)}`);
+  }
+  if (wipeLocal) clearLocal(raw);
+  saveMeta(raw, { uid: null, synced: {}, localT: {} });
+  setStatus({ state: 'fuera', email: undefined, last: undefined, error: undefined });
+  notify();
+}
+
 export async function syncNow(): Promise<void> {
   if (session) await (session.linked ? push() : connect());
 }
@@ -290,6 +334,7 @@ function authError(e: unknown): string {
     case 'auth/weak-password': return 'La contraseña debe tener al menos 6 caracteres.';
     case 'auth/invalid-email': return 'El correo no es válido.';
     case 'auth/missing-password': return 'Escribe la contraseña.';
+    case 'auth/requires-recent-login': return 'Por seguridad, cierra sesión, vuelve a entrar y repite.';
     case 'auth/too-many-requests': return 'Demasiados intentos. Espera unos minutos.';
     case 'auth/network-request-failed': return 'Sin conexión. Prueba cuando tengas internet.';
     case 'auth/operation-not-allowed': return 'El inicio de sesión con correo no está activado en Firebase.';

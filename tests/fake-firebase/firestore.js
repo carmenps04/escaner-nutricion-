@@ -10,8 +10,11 @@ const uid = () => JSON.parse(localStorage.getItem('fake.user') || 'null')?.uid;
 export function getFirestore() { return {}; }
 export function collection(_db, ...p) { return { path: p.join('/') }; }
 export function doc(coll, id) { return { path: coll.path + '/' + id, id }; }
-const snap = (list) => ({ forEach: (f) => list.forEach((d) => f({ id: d.id, data: () => d.data })) });
-export async function getDocs(coll) { return snap((await req('list?path=' + encodeURIComponent(coll.path) + '&uid=' + uid())).docs); }
+const snap = (coll, list) => {
+  const docs = list.map((d) => ({ id: d.id, ref: { path: coll.path + '/' + d.id, id: d.id }, data: () => d.data }));
+  return { docs, forEach: (f) => docs.forEach(f) };
+};
+export async function getDocs(coll) { return snap(coll, (await req('list?path=' + encodeURIComponent(coll.path) + '&uid=' + uid())).docs); }
 export function writeBatch() {
   const ops = [];
   return {
