@@ -40,3 +40,10 @@ test('sync: primera vez, junta listas y en lo demás manda la nube', () => {
   assert.deepEqual(c.map((x: { fecha: string }) => x.fecha), ['2026-09-01', '2026-10-10']);
   assert.equal(c[1].peso, 2);
 });
+
+test('reglas de Firestore: aceptan todos los datos que sincroniza la app', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { KEYS } = await import('../src/lib/backup.ts');
+  const rules = readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8');
+  for (const k of KEYS.filter((k) => k !== 'escaner.diario.v1')) assert.ok(rules.includes(`'${k}'`), `falta ${k} en firestore.rules`);
+});

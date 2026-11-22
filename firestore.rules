@@ -1,0 +1,27 @@
+rules_version = '2';
+// Reglas de Firestore del escáner nutricional. Se despliegan con: firebase deploy --only firestore:rules
+// Cada cuenta solo puede leer y escribir lo suyo (usuarios/{su uid}), y solo los documentos que usa la app.
+// Si la app empieza a sincronizar un dato nuevo (KEYS en src/lib/backup.ts), hay que añadirlo aquí.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    // Cada documento es { v: texto (JSON), t: fecha en ms }; Firestore ya limita a 1 MiB.
+    function valid() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['v', 't']) && d.v is string && d.v.size() < 1000000 && d.t is number;
+    }
+    match /usuarios/{uid}/datos/{id} {
+      allow read, delete: if owner(uid);
+      allow create, update: if owner(uid) && valid() && id in [
+        'escaner.perfil.v1', 'escaner.citas.v1', 'escaner.historial.v1', 'escaner.propios.v1',
+        'escaner.orden', 'escaner.plan.v1', 'escaner.resumen.v1'
+      ];
+    }
+    match /usuarios/{uid}/diario/{day} {
+      allow read, delete: if owner(uid);
+      allow create, update: if owner(uid) && valid() && day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+  }
+}
