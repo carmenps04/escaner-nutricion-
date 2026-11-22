@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Dumbbell, Loader2, Sofa } from 'lucide-react';
+import { Camera, ClipboardList, Database, Dumbbell, Flame, Loader2, PersonStanding, PieChart, Sofa, TrendingUp } from 'lucide-react';
 import {
   OBJETIVOS, imc, macroKcal, racionesToGrams, saveProfile, syncProfileWithCitas,
   type DayPlan, type Objetivo, type Profile,
@@ -19,14 +19,15 @@ const num = (s: string) => {
 };
 const str = (v: number | undefined) => (v == null ? '' : String(v).replace('.', ','));
 
+// [clave, nombre completo (ordenador), nombre corto (móvil), icono]
 const SECTIONS = [
-  ['macros', 'Macros'],
-  ['entreno', 'Entrenamiento semanal'],
-  ['plan', 'Plan del dietista'],
-  ['composicion', 'Composición corporal'],
-  ['gasto', 'Gasto y objetivo'],
-  ['citas', 'Evolución por citas'],
-  ['datos', 'Tus datos'],
+  ['macros', 'Macros', 'Macros', PieChart],
+  ['entreno', 'Entrenamiento semanal', 'Entreno', Dumbbell],
+  ['plan', 'Plan del dietista', 'Plan', ClipboardList],
+  ['composicion', 'Composición corporal', 'Cuerpo', PersonStanding],
+  ['gasto', 'Gasto y objetivo', 'Gasto', Flame],
+  ['citas', 'Evolución por citas', 'Citas', TrendingUp],
+  ['datos', 'Tus datos', 'Datos', Database],
 ] as const;
 type Section = (typeof SECTIONS)[number][0];
 const SECTION_KEY = 'escaner.perfil.seccion';
@@ -54,6 +55,9 @@ export default function ProfilePage({ profile, configured, onSaved, toast, pendi
   });
   const setSection = (k: Section) => {
     setSectionState(k);
+    // Si se cambia de sección tras bajar, se vuelve al principio de la sección nueva.
+    const top = subnav.current?.getBoundingClientRect().top ?? 0;
+    if (top < 0) subnav.current?.scrollIntoView({ block: 'start' });
     try { sessionStorage.setItem(SECTION_KEY, k); } catch { /* sin almacenamiento */ }
   };
   useEffect(() => { if (pendingImport) setSection('datos'); }, [pendingImport]);
@@ -66,10 +70,6 @@ export default function ProfilePage({ profile, configured, onSaved, toast, pendi
     lastProfile.current = profile;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
-  useEffect(() => {
-    const el = subnav.current?.querySelector<HTMLElement>('.on');
-    el?.scrollIntoView({ block: 'nearest', inline: 'center' });
-  }, [section]);
   const dirty = !configured || JSON.stringify(p) !== JSON.stringify(profile);
   // Sin calorías o macros la valoración no se puede calcular (dividiría entre cero).
   const invalid = [
@@ -118,8 +118,12 @@ export default function ProfilePage({ profile, configured, onSaved, toast, pendi
       </header>
 
       <div className="subnav" role="tablist" aria-label="Secciones del perfil" ref={subnav}>
-        {SECTIONS.map(([k, label]) => (
-          <button key={k} role="tab" aria-selected={section === k} className={section === k ? 'on' : ''} onClick={() => setSection(k)}>{label}</button>
+        {SECTIONS.map(([k, label, short, Icon]) => (
+          <button key={k} role="tab" aria-selected={section === k} aria-label={label} className={section === k ? 'on' : ''} onClick={() => setSection(k)}>
+            <Icon size={18} aria-hidden />
+            <span className="sn-short">{short}</span>
+            <span className="sn-long">{label}</span>
+          </button>
         ))}
       </div>
 
