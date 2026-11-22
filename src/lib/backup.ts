@@ -92,13 +92,6 @@ export async function backupLink(pass: string, base = `${location.origin}${locat
   return `${base}#datos=${toB64(JSON.stringify(await encryptBackup(makeBackup(), pass)))}`;
 }
 
-/** Dirección de la app desde la mudanza a Firebase Hosting (origen propio, con cabeceras de seguridad). */
-export const APP_URL = 'https://escaner-nutricion.web.app/';
-
-/** ¿Hay datos de la app en este navegador? */
-export function hasLocalData(): boolean {
-  try { return KEYS.some((k) => k !== 'escaner.orden' && localStorage.getItem(k) != null); } catch { return false; }
-}
 
 export interface ImportSummary {
   perfil: boolean;

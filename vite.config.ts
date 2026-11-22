@@ -4,9 +4,6 @@ import { defineConfig } from 'vite';
 import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
-/** Versión para la dirección antigua (GitHub Pages): solo la pantalla de mudanza. */
-const MUDANZA = process.env.VITE_MUDANZA === '1';
-
 /**
  * Copia el lector de texto (OCR) a dist/ocr al compilar, igual que en la app del gimnasio: la lectura
  * de fotos se hace dentro del móvil, sin servidores externos ni claves de API.
@@ -18,7 +15,6 @@ function ocrAssets(): Plugin {
     apply: 'build',
     configResolved(c) { outDir = c.build.outDir; },
     closeBundle() {
-      if (MUDANZA) return; // la pantalla de mudanza no lee fotos
       const out = `${outDir}/ocr`;
       mkdirSync(out, { recursive: true });
       cpSync('node_modules/tesseract.js/dist/worker.min.js', `${out}/worker.min.js`);
@@ -41,7 +37,6 @@ function serviceWorker(): Plugin {
     apply: 'build',
     configResolved(c) { outDir = c.build.outDir; },
     closeBundle() {
-      if (MUDANZA) return; // la pantalla de mudanza no se usa sin conexión
       const files: string[] = [];
       const walk = (dir: string) => {
         for (const f of readdirSync(dir)) {

@@ -1,32 +1,26 @@
-name: Publicar en GitHub Pages
-# Publica la app en Firebase Hosting (https://escaner-nutricion.web.app, su dirección propia) y en
-# GitHub Pages (la dirección antigua). Con MUDANZA_PAGES a 'true', GitHub Pages solo muestra el aviso
-# de mudanza.
+name: Publicar
+# Pasa los tests, compila y publica la app en Firebase Hosting (https://escaner-nutricion.web.app).
+# Los cambios propuestos (por ejemplo, de Dependabot) solo se prueban; se publica lo que llega a main.
 
 on:
   push:
     branches: [main]
-  # Los cambios propuestos (por ejemplo, de Dependabot) se prueban antes de aceptarlos; solo se
-  # publica lo que llega a main.
   pull_request:
   workflow_dispatch:
 
-# Por defecto, solo lectura; el permiso de publicar lo tiene únicamente el paso «deploy».
+# Solo lectura: la publicación usa la clave de la cuenta de servicio, no el token de GitHub.
 permissions:
   contents: read
 
 concurrency:
-  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  group: publicar-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
   cancel-in-progress: true
-
-env:
-  MUDANZA_PAGES: 'true'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # Solo se publica en Firebase si existe la clave de la cuenta de servicio (secreto del repositorio).
+      # Solo se publica si existe la clave de la cuenta de servicio (secreto del repositorio).
       HAS_FIREBASE_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
     steps:
       - uses: actions/checkout@v4
@@ -46,24 +40,3 @@ jobs:
           printf '%s' "$FIREBASE_KEY" > "$RUNNER_TEMP/clave.json"
           GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/clave.json" npx --yes firebase-tools@15.37.0 deploy --only hosting --project escaner-nutricion --non-interactive
           rm -f "$RUNNER_TEMP/clave.json"
-      - name: Aviso de mudanza para la dirección antigua
-        if: github.event_name != 'pull_request' && env.MUDANZA_PAGES == 'true'
-        run: VITE_MUDANZA=1 npx vite build --outDir dist-pages --emptyOutDir
-      - if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ${{ env.MUDANZA_PAGES == 'true' && 'dist-pages' || 'dist' }}
-
-  deploy:
-    if: github.event_name != 'pull_request'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
