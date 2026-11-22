@@ -19,6 +19,57 @@ export interface Backup {
   datos: Record<string, string>;
 }
 
+/**
+ * Copia cifrada: los datos van cifrados con AES-GCM (256 bits) y una clave sacada de la contraseña
+ * con PBKDF2-SHA256 (600 000 vueltas, lo que recomienda OWASP). Sin la contraseña no se puede leer;
+ * si se olvida, la copia no se puede recuperar. Todo se hace en el navegador (WebCrypto).
+ */
+export interface Encrypted {
+  app: 'escaner-nutricion';
+  version: 2;
+  fecha: string;
+  cifrado: { kdf: 'PBKDF2-SHA256'; iter: number; salt: string; iv: string; data: string };
+}
+
+export const isEncrypted = (b: Backup | Encrypted): b is Encrypted => 'cifrado' in b;
+export const MIN_PASS = 8;
+const ITER = 600_000;
+
+const bytesToB64 = (u: Uint8Array) => {
+  let s = '';
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000));
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+const b64ToBytes = (s: string): Uint8Array<ArrayBuffer> => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+
+async function deriveKey(pass: string, salt: Uint8Array<ArrayBuffer>, iter: number): Promise<CryptoKey> {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+
+export async function encryptBackup(b: Backup, pass: string): Promise<Encrypted> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(pass, salt, ITER);
+  const data = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(b))));
+  return { app: 'escaner-nutricion', version: 2, fecha: b.fecha, cifrado: { kdf: 'PBKDF2-SHA256', iter: ITER, salt: bytesToB64(salt), iv: bytesToB64(iv), data: bytesToB64(data) } };
+}
+
+/** Descifra una copia; null si la contraseña no es la correcta (o la copia está dañada). */
+export async function decryptBackup(e: Encrypted, pass: string): Promise<Backup | null> {
+  try {
+    const c = e.cifrado;
+    // Tope de vueltas: una copia manipulada no puede dejar el móvil colgado.
+    if (!(c.iter >= 100_000 && c.iter <= 5_000_000)) return null;
+    const key = await deriveKey(pass, b64ToBytes(c.salt), c.iter);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(c.iv) }, key, b64ToBytes(c.data));
+    const b = JSON.parse(new TextDecoder().decode(plain));
+    return b?.app === 'escaner-nutricion' && b.datos ? b : null;
+  } catch {
+    return null;
+  }
+}
+
 export function makeBackup(): Backup {
   const datos: Record<string, string> = {};
   for (const k of KEYS) {
@@ -33,9 +84,12 @@ export function makeBackup(): Backup {
 const toB64 = (s: string) => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const fromB64 = (s: string) => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))));
 
-/** Enlace con todos los datos tras «#datos=». Lo que va tras «#» no se envía a ningún servidor. */
-export function backupLink(): string {
-  return `${location.origin}${location.pathname}#datos=${toB64(JSON.stringify(makeBackup()))}`;
+/**
+ * Enlace con todos los datos, cifrados con la contraseña, tras «#datos=». Lo que va tras «#» no se
+ * envía a ningún servidor al abrirlo, pero el enlace queda guardado donde se pegue: por eso va cifrado.
+ */
+export async function backupLink(pass: string): Promise<string> {
+  return `${location.origin}${location.pathname}#datos=${toB64(JSON.stringify(await encryptBackup(makeBackup(), pass)))}`;
 }
 
 export interface ImportSummary {
@@ -63,19 +117,19 @@ function summarize(b: Backup): ImportSummary {
  * Entiende: un enlace o código con «datos=» (todo), uno antiguo con «perfil=» (solo el perfil), el
  * código suelto o el contenido de un archivo de copia (.json).
  */
-export function parseBackup(text: string): Backup | null {
+const asBackup = (b: any): Backup | Encrypted | null => {
+  if (b?.app !== 'escaner-nutricion') return null;
+  if (b.cifrado && typeof b.cifrado.data === 'string' && typeof b.cifrado.salt === 'string' && typeof b.cifrado.iv === 'string') return b as Encrypted;
+  return b.datos && typeof b.datos === 'object' ? (b as Backup) : null;
+};
+
+export function parseBackup(text: string): Backup | Encrypted | null {
   const t = text.trim();
   if (!t) return null;
   try {
-    if (t.startsWith('{')) {
-      const b = JSON.parse(t);
-      return b?.app === 'escaner-nutricion' && b.datos ? b : null;
-    }
+    if (t.startsWith('{')) return asBackup(JSON.parse(t));
     const datos = t.match(/datos=([A-Za-z0-9_\-+/=]+)/);
-    if (datos) {
-      const b = JSON.parse(fromB64(datos[1]));
-      return b?.app === 'escaner-nutricion' && b.datos ? b : null;
-    }
+    if (datos) return asBackup(JSON.parse(fromB64(datos[1])));
     const perfil = t.match(/perfil=([A-Za-z0-9_\-+/=]+)/);
     if (perfil) {
       const p = JSON.parse(fromB64(perfil[1]));
@@ -83,8 +137,7 @@ export function parseBackup(text: string): Backup | null {
       return { app: 'escaner-nutricion', version: 1, fecha: new Date().toISOString(), datos: { 'escaner.perfil.v1': JSON.stringify(p) } };
     }
     // Código suelto (sin enlace)
-    const b = JSON.parse(fromB64(t));
-    return b?.app === 'escaner-nutricion' && b.datos ? b : null;
+    return asBackup(JSON.parse(fromB64(t)));
   } catch {
     return null;
   }
@@ -97,18 +150,19 @@ export function describe(b: Backup): ImportSummary {
 /** Sustituye los datos de este dispositivo por los de la copia. */
 export function applyBackup(b: Backup): ImportSummary {
   for (const [k, v] of Object.entries(b.datos)) {
-    if (KEYS.includes(k)) {
+    // Solo las claves de la app y solo texto: una copia manipulada no puede escribir otra cosa.
+    if (KEYS.includes(k) && typeof v === 'string') {
       try { localStorage.setItem(k, v); } catch { /* almacenamiento lleno */ }
     }
   }
   return summarize(b);
 }
 
-export function downloadBackup(): void {
-  const blob = new Blob([JSON.stringify(makeBackup(), null, 1)], { type: 'application/json' });
+export async function downloadBackup(pass: string): Promise<void> {
+  const blob = new Blob([JSON.stringify(await encryptBackup(makeBackup(), pass), null, 1)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `escaner-nutricion-copia-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `escaner-nutricion-copia-cifrada-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();

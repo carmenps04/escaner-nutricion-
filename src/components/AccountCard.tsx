@@ -15,14 +15,15 @@ export default function AccountCard({ toast }: { toast: (m: string) => void }) {
   const s = useSyncStatus();
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
-  const [busy, setBusy] = useState<null | 'in' | 'up' | 'reset' | 'sync' | 'delete'>(null);
+  const [busy, setBusy] = useState<null | 'in' | 'up' | 'reset' | 'sync' | 'delete' | 'out'>(null);
   const [consent, setConsent] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [wipeLocal, setWipeLocal] = useState(true);
+  const [leaving, setLeaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const logged = s.state !== 'fuera' && !!s.email;
 
-  const run = async (kind: 'in' | 'up' | 'reset' | 'sync' | 'delete', fn: () => Promise<void>, ok?: string) => {
+  const run = async (kind: 'in' | 'up' | 'reset' | 'sync' | 'delete' | 'out', fn: () => Promise<void>, ok?: string) => {
     setBusy(kind);
     setError(null);
     try {
@@ -61,6 +62,21 @@ export default function AccountCard({ toast }: { toast: (m: string) => void }) {
         </div>
         {error && !deleting && <p className="note warn-note">{error}</p>}
         <p className="small muted">Al cerrar sesión, los datos se quedan en este dispositivo pero dejan de sincronizarse.</p>
+        {!leaving ? (
+          <button className="link" disabled={!!busy} onClick={() => setLeaving(true)}>Cerrar sesión y borrar los datos de este dispositivo</button>
+        ) : (
+          <div className="cita-confirm">
+            <span>Se cierra la sesión y se borran de este dispositivo tu perfil, diario, productos y resúmenes. En tu cuenta siguen guardados: al volver a entrar se recuperan.</span>
+            <button className="btn ghost small-btn" disabled={!!busy} onClick={() => setLeaving(false)}>Cancelar</button>
+            <button className="btn danger small-btn" disabled={!!busy} onClick={() => void run('out', async () => {
+              await signOut(true);
+              // Se recarga para que ninguna pantalla siga enseñando los datos borrados.
+              setTimeout(() => location.reload(), 900);
+            }, 'Sesión cerrada y datos borrados de este dispositivo')}>
+              {busy === 'out' && <Loader2 className="spin" size={15} />} Cerrar y borrar
+            </button>
+          </div>
+        )}
         <Privacy />
         {!deleting ? (
           <button className="link danger-link" onClick={() => { setDeleting(true); setError(null); setPass(''); }}>
@@ -70,7 +86,10 @@ export default function AccountCard({ toast }: { toast: (m: string) => void }) {
           <form className="delete-account" onSubmit={(e) => {
             e.preventDefault();
             if (!pass) return;
-            void run('delete', () => deleteAccount(pass, wipeLocal), wipeLocal ? 'Cuenta y datos borrados' : 'Cuenta borrada; los datos siguen en este dispositivo');
+            void run('delete', async () => {
+              await deleteAccount(pass, wipeLocal);
+              if (wipeLocal) setTimeout(() => location.reload(), 900);
+            }, wipeLocal ? 'Cuenta y datos borrados' : 'Cuenta borrada; los datos siguen en este dispositivo');
           }}>
             <strong>Borrar la cuenta {s.email}</strong>
             <p className="small">Se borran para siempre la cuenta y todo lo guardado en la nube (perfil, citas, diario, productos y resúmenes). No se puede deshacer. Si quieres conservar algo, descarga antes una copia en «Tus datos».</p>

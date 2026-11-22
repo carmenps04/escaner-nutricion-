@@ -580,3 +580,7 @@ button.vbar:hover .vbar-track, button.vbar:focus-visible .vbar-track { backgroun
 .link.danger-link { color: var(--bad-ink); align-self: flex-start; }
 .delete-account { display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--bad); color: var(--bad-ink); border-radius: var(--radius-sm); }
 .delete-account .field span { color: var(--bad-ink); }
+/* Copias cifradas */
+.export-form strong, .unlock-form > span { font-size: 14px; font-weight: 600; }
+.unlock-form { flex: 1 1 100%; display: flex; flex-direction: column; gap: 10px; }
+.unlock-form .field span { font-weight: 500; }

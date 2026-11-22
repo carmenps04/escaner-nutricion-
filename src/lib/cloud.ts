@@ -2,7 +2,7 @@
 import type { Auth, User } from 'firebase/auth';
 import type { Firestore, Unsubscribe } from 'firebase/firestore';
 import {
-  DIARIO, clearLocal, hash, isDayId, isSyncKey, loadMeta, localChanges, mergeUnit, readUnits, saveMeta, writeUnit, type KV,
+  DIARIO, META, clearLocal, hash, isDayId, isSyncKey, loadMeta, localChanges, mergeUnit, readUnits, saveMeta, writeUnit, type KV,
 } from './syncCore.ts';
 
 // La configuración web de Firebase es pública por diseño: lo que protege los datos son las reglas
@@ -273,13 +273,37 @@ export async function resetPassword(email: string): Promise<void> {
   auth.languageCode = 'es';
   try { await mod.sendPasswordResetEmail(auth, email.trim()); } catch (e) { throw new Error(authError(e)); }
 }
-/** Cierra la sesión. Los datos se quedan en este dispositivo. */
-export async function signOut(): Promise<void> {
-  const { auth, mod } = await loadAuth();
-  await mod.signOut(auth);
-  const m = loadMeta(raw);
-  saveMeta(raw, { ...m, localT: {} });
+/**
+ * Borra de este dispositivo todo lo de la app: datos, estado de sincronización, el ajuste de «hoy» y
+ * las búsquedas de Open Food Facts guardadas para usar sin conexión (dicen qué productos has mirado).
+ */
+async function wipeDevice(): Promise<void> {
+  clearLocal(raw);
+  raw.removeItem(META);
+  raw.removeItem('escaner.hoy.v1');
+  try { sessionStorage.removeItem('escaner.perfil.seccion'); } catch { /* ignorar */ }
+  try { await caches.delete('off-api-v1'); } catch { /* sin caché */ }
 }
+
+/**
+ * Cierra la sesión. Sin wipeLocal, los datos se quedan en este dispositivo (sin sincronizar); con
+ * wipeLocal se borran también de aquí (para un ordenador o móvil prestado).
+ */
+export async function signOut(wipeLocal = false): Promise<void> {
+  const { auth, mod } = await loadAuth();
+  // Se deja de escuchar antes: si no, un cambio que llegue mientras tanto volvería a escribir datos.
+  session?.unsub.forEach((f) => f());
+  session = null;
+  if (timer) clearTimeout(timer);
+  await mod.signOut(auth);
+  if (wipeLocal) {
+    await wipeDevice();
+  } else {
+    const m = loadMeta(raw);
+    saveMeta(raw, { ...m, localT: {} });
+  }
+}
+
 /**
  * Borra la cuenta y todo lo que hay en la nube (derecho de supresión). Firebase pide haber entrado
  * hace poco para borrar una cuenta, por eso se vuelve a pedir la contraseña.
@@ -318,8 +342,8 @@ export async function deleteAccount(password: string, wipeLocal: boolean): Promi
   } catch (e) {
     throw new Error(`Los datos de la nube están borrados, pero la cuenta no: ${authError(e)}`);
   }
-  if (wipeLocal) clearLocal(raw);
-  saveMeta(raw, { uid: null, synced: {}, localT: {} });
+  if (wipeLocal) await wipeDevice();
+  else saveMeta(raw, { uid: null, synced: {}, localT: {} });
   setStatus({ state: 'fuera', email: undefined, last: undefined, error: undefined });
   notify();
 }

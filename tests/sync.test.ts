@@ -47,3 +47,25 @@ test('reglas de Firestore: aceptan todos los datos que sincroniza la app', async
   const rules = readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8');
   for (const k of KEYS.filter((k) => k !== 'escaner.diario.v1')) assert.ok(rules.includes(`'${k}'`), `falta ${k} en firestore.rules`);
 });
+
+test('copias cifradas: se abren con su contraseña y no con otra; las antiguas siguen valiendo', async () => {
+  const { encryptBackup, decryptBackup, parseBackup, isEncrypted } = await import('../src/lib/backup.ts');
+  const b = { app: 'escaner-nutricion' as const, version: 1 as const, fecha: '2026-11-22T10:00:00Z', datos: { 'escaner.perfil.v1': '{"peso":70}' } };
+  const e = await encryptBackup(b, 'una contraseña larga');
+  assert.ok(!JSON.stringify(e).includes('peso'), 'los datos no van en claro');
+  assert.deepEqual(await decryptBackup(e, 'una contraseña larga'), b);
+  assert.equal(await decryptBackup(e, 'otra contraseña'), null);
+  // Manipulada: se detecta (AES-GCM autentica los datos)
+  const bad = { ...e, cifrado: { ...e.cifrado, data: e.cifrado.data.slice(0, -4) + 'AAAA' } };
+  assert.equal(await decryptBackup(bad, 'una contraseña larga'), null);
+  // Vueltas absurdas: se rechaza sin intentarlo
+  assert.equal(await decryptBackup({ ...e, cifrado: { ...e.cifrado, iter: 1e9 } }, 'una contraseña larga'), null);
+  // Por enlace y por archivo
+  const code = Buffer.from(JSON.stringify(e)).toString('base64url');
+  const p1 = parseBackup(`https://x/#datos=${code}`);
+  assert.ok(p1 && isEncrypted(p1));
+  const p2 = parseBackup(JSON.stringify(e));
+  assert.ok(p2 && isEncrypted(p2));
+  const old = parseBackup(JSON.stringify(b));
+  assert.ok(old && !isEncrypted(old));
+});

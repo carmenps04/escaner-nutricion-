@@ -1,0 +1,19 @@
+# Dependabot: avisos y correcciones de dependencias.
+# - npm: solo correcciones de seguridad (las actualizaciones normales están desactivadas con el límite 0
+#   para no llenar el repositorio de avisos). Requiere activar «Dependabot security updates» en
+#   Settings → Code security.
+# - GitHub Actions: revisión mensual, todo junto en un solo aviso.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      acciones:
+        patterns: ['*']

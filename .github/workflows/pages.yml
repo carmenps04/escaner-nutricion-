@@ -3,15 +3,17 @@ name: Publicar en GitHub Pages
 on:
   push:
     branches: [main]
+  # Los cambios propuestos (por ejemplo, de Dependabot) se prueban antes de aceptarlos; solo se
+  # publica lo que llega a main.
+  pull_request:
   workflow_dispatch:
 
+# Por defecto, solo lectura; el permiso de publicar lo tiene únicamente el paso «deploy».
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
   cancel-in-progress: true
 
 jobs:
@@ -26,13 +28,18 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - uses: actions/upload-pages-artifact@v3
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
