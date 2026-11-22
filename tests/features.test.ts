@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rankAlternatives, storeOf, categoryChain } from '../src/lib/alternatives.ts';
+import { rankAlternatives, storeOf, categoryChain, setRetryDelays } from '../src/lib/alternatives.ts';
+setRetryDelays([0, 0, 0]);
 import { forGrams, gramsLeft, remaining, totals, type DiaryEntry } from '../src/lib/diary.ts';
 import { DEFAULT_PROFILE, type Profile } from '../src/lib/profile.ts';
 import type { Product } from '../src/lib/types.ts';
@@ -176,14 +177,27 @@ test('alternativas: si Open Food Facts da 503, reintenta una vez', async () => {
 });
 
 test('alternativas: mensaje claro si sigue saturado o sin red', async () => {
-  await withFetch(async () => new Response('', { status: 503 }), async () => {
-    const r = await findAlternatives(galleta, DEFAULT_PROFILE);
-    assert.equal(r.status, 'error');
-    assert.match(r.message ?? '', /saturado/);
-  });
-  await withFetch(async () => { throw new TypeError('Failed to fetch'); }, async () => {
-    assert.match((await findAlternatives(galleta, DEFAULT_PROFILE)).message ?? '', /conectar/);
-  });
+  const { setRetryDelays } = await import('../src/lib/alternatives.ts');
+  setRetryDelays([0, 0, 0]);
+  const nav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  try {
+    Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true });
+    await withFetch(async () => new Response('', { status: 503 }), async () => {
+      const r = await findAlternatives(galleta, DEFAULT_PROFILE);
+      assert.equal(r.status, 'error');
+      assert.match(r.message ?? '', /no responde/);
+    });
+    // Error sin CORS con internet: es Open Food Facts saturado, no falta de conexión.
+    await withFetch(async () => { throw new TypeError('Failed to fetch'); }, async () => {
+      assert.match((await findAlternatives(galleta, DEFAULT_PROFILE)).message ?? '', /no responde/);
+    });
+    Object.defineProperty(globalThis, 'navigator', { value: { onLine: false }, configurable: true });
+    await withFetch(async () => { throw new TypeError('Failed to fetch'); }, async () => {
+      assert.match((await findAlternatives(galleta, DEFAULT_PROFILE)).message ?? '', /No hay conexión/);
+    });
+  } finally {
+    if (nav) Object.defineProperty(globalThis, 'navigator', nav);
+  }
 });
 
 test('alternativas: si falla la segunda búsqueda, usa lo ya encontrado', async () => {
@@ -208,4 +222,38 @@ test('kcal: naranja si sigues en déficit, rojo si pierdes más de la mitad', ()
   // Sin datos de gasto: rojo desde +10 %.
   assert.equal(kcalLevel(1650, 1500, 0).level, 'alto');
   assert.equal(kcalLevel(1660, 1500, 0).level, 'malo');
+});
+
+test('búsqueda en Open Food Facts: reintenta si está saturado y distingue la falta de conexión', async () => {
+  const { fetchSearch, SearchError } = await import('../src/lib/alternatives.ts');
+  const real = globalThis.fetch;
+  const nav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const setOnline = (v: boolean) => Object.defineProperty(globalThis, 'navigator', { value: { onLine: v }, configurable: true });
+  const ok = () => new Response(JSON.stringify({ count: 1, products: [] }), { status: 200 });
+  const corsFail = () => Promise.reject(new TypeError('Failed to fetch'));
+  try {
+    setOnline(true);
+    // Saturado (error sin CORS = fallo de red) dos veces y luego bien: devuelve el resultado.
+    let n = 0;
+    globalThis.fetch = (async () => (++n <= 2 ? corsFail() : ok())) as typeof fetch;
+    assert.equal((await fetchSearch('u', [0, 0, 0])).count, 1);
+    assert.equal(n, 3);
+    // Página HTML de saturación y luego bien.
+    n = 0;
+    globalThis.fetch = (async () => (++n === 1 ? new Response('<!DOCTYPE html>', { status: 200 }) : ok())) as typeof fetch;
+    assert.equal((await fetchSearch('u', [0, 0, 0])).count, 1);
+    // Siempre saturado: tres intentos y error «saturado».
+    n = 0;
+    globalThis.fetch = (async () => { n++; return corsFail(); }) as typeof fetch;
+    await assert.rejects(fetchSearch('u', [0, 0, 0]), (e: unknown) => e instanceof SearchError && e.reason === 'saturado');
+    assert.equal(n, 3);
+    // Sin conexión: un solo intento y error «red».
+    setOnline(false);
+    n = 0;
+    await assert.rejects(fetchSearch('u', [0, 0, 0]), (e: unknown) => e instanceof SearchError && e.reason === 'red');
+    assert.equal(n, 1);
+  } finally {
+    globalThis.fetch = real;
+    if (nav) Object.defineProperty(globalThis, 'navigator', nav);
+  }
 });

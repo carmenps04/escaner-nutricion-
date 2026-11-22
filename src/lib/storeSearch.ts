@@ -51,9 +51,16 @@ export interface StoreResults {
   total: number;
 }
 
+// Resultados ya pedidos mientras la app está abierta: repetir una búsqueda no gasta otra petición
+// (Open Food Facts solo deja 10 búsquedas por minuto).
+const cache = new Map<string, StoreResults>();
+
 /** Busca por nombre en un supermercado. Sin repetir productos con el mismo código. */
 export async function searchStore(store: string, q: string, page = 1): Promise<StoreResults> {
-  const json = await fetchSearch(searchUrl(store, q, page));
+  const url = searchUrl(store, q.toLowerCase(), page);
+  const hit = cache.get(url);
+  if (hit) return hit;
+  const json = await fetchSearch(url);
   const seen = new Set<string>();
   const products: Product[] = [];
   for (const x of (json.products ?? []) as Record<string, any>[]) {
@@ -61,7 +68,9 @@ export async function searchStore(store: string, q: string, page = 1): Promise<S
     seen.add(x.code);
     products.push(fromOff(String(x.code), x));
   }
-  return { products, total: Number(json.count) || products.length };
+  const r = { products, total: Number(json.count) || products.length };
+  cache.set(url, r);
+  return r;
 }
 
 const KEY = 'escaner.super';

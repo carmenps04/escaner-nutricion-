@@ -62,7 +62,7 @@ export function rankAlternatives(current: Product, candidates: Product[], profil
 }
 
 /** Error de la búsqueda de Open Food Facts, con el motivo para el mensaje. */
-type Reason = 'lento' | 'saturado' | 'red';
+type Reason = 'lento' | 'saturado' | 'red' | 'otro';
 export class SearchError extends Error {
   reason: Reason;
   constructor(reason: Reason) { super(reason); this.reason = reason; }
@@ -71,13 +71,19 @@ export class SearchError extends Error {
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * La búsqueda de Open Food Facts es mucho más lenta que la consulta por código de barras y a veces
- * responde 503 cuando está saturada. Se le dan 25 s y se reintenta una vez.
+ * La búsqueda de Open Food Facts es mucho más lenta que la consulta por código de barras y limita las
+ * búsquedas (10 por minuto y por conexión, más un límite global). Cuando rechaza una por saturación, su
+ * respuesta de error no trae el permiso CORS, así que el navegador la da como fallo de red aunque haya
+ * internet. Por eso, si hay conexión, un fallo de red se trata como saturación y se reintenta a los 2 y
+ * a los 5 s (los fallos van intercalados con aciertos y suelen pasar enseguida). Cada intento tiene 25 s.
  */
-export async function fetchSearch(url: string): Promise<any> {
+let retryDelays = [0, 2000, 5000];
+/** Solo para las pruebas: esperas entre reintentos. */
+export function setRetryDelays(d: number[]): void { retryDelays = d; }
+export async function fetchSearch(url: string, delays = retryDelays): Promise<any> {
   let last: SearchError = new SearchError('red');
-  for (let attempt = 0; attempt < 2; attempt++) {
-    if (attempt) await wait(1500);
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (delays[attempt]) await wait(delays[attempt]);
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 25000);
     try {
@@ -86,9 +92,16 @@ export async function fetchSearch(url: string): Promise<any> {
         // Cuando está saturado, Open Food Facts a veces responde una página HTML en lugar de JSON.
         try { return await res.json(); } catch { last = new SearchError('saturado'); continue; }
       }
-      last = new SearchError(res.status === 429 || res.status >= 500 ? 'saturado' : 'red');
+      last = new SearchError(res.status === 429 || res.status >= 500 ? 'saturado' : 'otro');
+      if (last.reason === 'otro') break; // otros errores (404…) no se arreglan reintentando
     } catch (e) {
-      last = new SearchError((e as Error).name === 'AbortError' ? 'lento' : 'red');
+      if ((e as Error).name === 'AbortError') {
+        last = new SearchError('lento');
+        if (attempt >= 1) break; // ya ha tardado demasiado dos veces
+      } else {
+        last = new SearchError(typeof navigator !== 'undefined' && navigator.onLine === false ? 'red' : 'saturado');
+        if (last.reason === 'red') break; // sin conexión: no tiene sentido reintentar
+      }
     } finally {
       clearTimeout(timer);
     }
@@ -106,8 +119,9 @@ async function search(category: string, store: string | null): Promise<Product[]
 
 export const ERROR_TEXT: Record<Reason, string> = {
   lento: 'Open Food Facts está tardando demasiado en responder. Prueba otra vez en un rato.',
-  saturado: 'Open Food Facts está saturado ahora mismo. Prueba otra vez en un rato.',
-  red: 'No se ha podido conectar con Open Food Facts. Revisa la conexión y prueba otra vez.',
+  saturado: 'Open Food Facts no responde ahora mismo (a veces se satura unos segundos). Lo he intentado tres veces: prueba de nuevo dentro de un momento.',
+  red: 'No hay conexión a internet. Revisa la conexión y prueba otra vez.',
+  otro: 'Open Food Facts ha devuelto un error. Prueba otra vez dentro de un momento.',
 };
 
 /**
