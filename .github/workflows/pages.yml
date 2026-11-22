@@ -38,7 +38,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - name: Publicar en Firebase Hosting
-        if: github.event_name == 'push' && env.HAS_FIREBASE_KEY == 'true'
+        if: github.event_name != 'pull_request' && env.HAS_FIREBASE_KEY == 'true'
         env:
           FIREBASE_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
